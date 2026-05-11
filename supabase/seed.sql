@@ -512,6 +512,159 @@ VALUES
     true
   );
 
+-- Pipeline history demo records for timeline view
+INSERT INTO public.pipeline_history (
+  pipeline_id,
+  old_stage,
+  new_stage,
+  changed_by,
+  changed_at,
+  notes
+)
+SELECT
+  s.id,
+  NULL,
+  'contacted',
+  s.agent_id,
+  now() - interval '10 days',
+  'Initial outreach completed with procurement office.'
+FROM public.school_sales s
+WHERE s.package_name = 'Upper Primary Bundle'
+LIMIT 1;
+
+INSERT INTO public.pipeline_history (
+  pipeline_id,
+  old_stage,
+  new_stage,
+  changed_by,
+  changed_at,
+  notes
+)
+SELECT
+  s.id,
+  'contacted',
+  'meeting_scheduled',
+  s.agent_id,
+  now() - interval '8 days',
+  'School requested a formal meeting with board secretary.'
+FROM public.school_sales s
+WHERE s.package_name = 'Upper Primary Bundle'
+LIMIT 1;
+
+INSERT INTO public.pipeline_history (
+  pipeline_id,
+  old_stage,
+  new_stage,
+  changed_by,
+  changed_at,
+  notes
+)
+SELECT
+  s.id,
+  'meeting_scheduled',
+  'quotation_sent',
+  s.agent_id,
+  now() - interval '4 days',
+  'Quotation QT-2026-0333 submitted by email and hard copy.'
+FROM public.school_sales s
+WHERE s.package_name = 'Upper Primary Bundle'
+LIMIT 1;
+
+INSERT INTO public.pipeline_history (
+  pipeline_id,
+  old_stage,
+  new_stage,
+  changed_by,
+  changed_at,
+  notes
+)
+SELECT
+  s.id,
+  NULL,
+  'quotation_sent',
+  s.agent_id,
+  now() - interval '6 days',
+  'Initial quote delivered after sample feedback.'
+FROM public.school_sales s
+WHERE s.package_name = 'Book List Bundle'
+LIMIT 1;
+
+INSERT INTO public.pipeline_history (
+  pipeline_id,
+  old_stage,
+  new_stage,
+  changed_by,
+  changed_at,
+  notes
+)
+SELECT
+  s.id,
+  'quotation_sent',
+  'decision_pending',
+  s.agent_id,
+  now() - interval '3 days',
+  'Moved to decision pending awaiting principal sign-off.'
+FROM public.school_sales s
+WHERE s.package_name = 'Book Fund Starter Package'
+LIMIT 1;
+
+INSERT INTO public.pipeline_history (
+  pipeline_id,
+  old_stage,
+  new_stage,
+  changed_by,
+  changed_at,
+  notes
+)
+SELECT
+  s.id,
+  'decision_pending',
+  'won',
+  s.agent_id,
+  now() - interval '6 hours',
+  'Order approved and ready for checkout.'
+FROM public.school_sales s
+WHERE s.package_name = 'Literacy Expansion Package'
+LIMIT 1;
+
+INSERT INTO public.pipeline_history (
+  pipeline_id,
+  old_stage,
+  new_stage,
+  changed_by,
+  changed_at,
+  notes
+)
+SELECT
+  s.id,
+  'contacted',
+  'lost',
+  s.agent_id,
+  now() - interval '20 days',
+  'Budget redirected to infrastructure, deal closed lost.'
+FROM public.school_sales s
+WHERE s.package_name = 'Budget Saver Bundle'
+LIMIT 1;
+
+INSERT INTO public.pipeline_history (
+  pipeline_id,
+  old_stage,
+  new_stage,
+  changed_by,
+  changed_at,
+  notes
+)
+SELECT
+  s.id,
+  'contacted',
+  'dormant',
+  s.agent_id,
+  now() - interval '35 days',
+  'No response after repeated follow-ups.'
+FROM public.school_sales s
+WHERE s.package_name = 'Operations Support Bundle'
+LIMIT 1;
+
 INSERT INTO public.school_sample_distributions (
   school_id,
   agent_id,

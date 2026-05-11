@@ -102,6 +102,49 @@ DO $$ BEGIN
 EXCEPTION WHEN undefined_table THEN NULL;
 END $$;
 
+CREATE TABLE IF NOT EXISTS public.pipeline_history (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    pipeline_id UUID NOT NULL REFERENCES public.school_sales(id) ON DELETE CASCADE,
+    old_stage TEXT,
+    new_stage TEXT NOT NULL,
+    changed_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    changed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('utc'::text, now()),
+    notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pipeline_history_pipeline_id
+ON public.pipeline_history (pipeline_id);
+
+CREATE INDEX IF NOT EXISTS idx_pipeline_history_changed_at
+ON public.pipeline_history (changed_at DESC);
+
+CREATE OR REPLACE FUNCTION public.log_pipeline_stage_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO public.pipeline_history (pipeline_id, old_stage, new_stage, changed_by, notes)
+        VALUES (NEW.id, NULL, NEW.sale_status, auth.uid(), NEW.notes);
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'UPDATE' AND coalesce(NEW.sale_status, '') <> coalesce(OLD.sale_status, '') THEN
+        INSERT INTO public.pipeline_history (pipeline_id, old_stage, new_stage, changed_by, notes)
+        VALUES (NEW.id, OLD.sale_status, NEW.sale_status, auth.uid(), NEW.notes);
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS log_school_sales_stage_change ON public.school_sales;
+CREATE TRIGGER log_school_sales_stage_change
+AFTER INSERT OR UPDATE ON public.school_sales
+FOR EACH ROW EXECUTE PROCEDURE public.log_pipeline_stage_change();
+
 DO $$ BEGIN
     UPDATE public.school_sales
     SET sale_status = 'lead'
@@ -149,9 +192,25 @@ ALTER TABLE public.school_sample_distributions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.catalog_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.school_sales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pipeline_history ENABLE ROW LEVEL SECURITY;
 
 -- Optional: Re-create missing permissive policies if needed
 -- (Your schema.sql handles granular RLS policies already, these act as fallbacks if missing)
 DO $$ BEGIN
     CREATE POLICY "Allow authenticated full access on route_plans" ON public.route_plans FOR ALL TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "authenticated_can_view_pipeline_history"
+    ON public.pipeline_history
+    FOR SELECT
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1
+        FROM public.school_sales s
+        WHERE s.id = pipeline_id
+          AND (s.agent_id = auth.uid() OR public.is_manager_or_admin())
+      )
+    );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;

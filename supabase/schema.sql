@@ -464,6 +464,44 @@ begin
   end if;
 end $$;
 
+create table if not exists public.pipeline_history (
+  id uuid primary key default gen_random_uuid(),
+  pipeline_id uuid not null references public.school_sales (id) on delete cascade,
+  old_stage text,
+  new_stage text not null,
+  changed_by uuid references public.users (id) on delete set null,
+  changed_at timestamptz not null default now(),
+  notes text
+);
+
+create index if not exists idx_pipeline_history_pipeline_id
+  on public.pipeline_history (pipeline_id);
+
+create index if not exists idx_pipeline_history_changed_at
+  on public.pipeline_history (changed_at desc);
+
+create or replace function public.log_pipeline_stage_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    insert into public.pipeline_history (pipeline_id, old_stage, new_stage, changed_by, notes)
+    values (new.id, null, new.sale_status, auth.uid(), new.notes);
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' and coalesce(new.sale_status, '') <> coalesce(old.sale_status, '') then
+    insert into public.pipeline_history (pipeline_id, old_stage, new_stage, changed_by, notes)
+    values (new.id, old.sale_status, new.sale_status, auth.uid(), new.notes);
+  end if;
+
+  return new;
+end;
+$$;
+
 create table if not exists public.school_sample_distributions (
   id uuid primary key default gen_random_uuid(),
   school_id uuid not null references public.schools (id) on delete cascade,
@@ -614,6 +652,11 @@ create trigger touch_school_sales_updated_at
 before update on public.school_sales
 for each row execute procedure public.set_updated_at();
 
+drop trigger if exists log_school_sales_stage_change on public.school_sales;
+create trigger log_school_sales_stage_change
+after insert or update on public.school_sales
+for each row execute procedure public.log_pipeline_stage_change();
+
 drop trigger if exists touch_school_sample_distributions_updated_at on public.school_sample_distributions;
 create trigger touch_school_sample_distributions_updated_at
 before update on public.school_sample_distributions
@@ -631,6 +674,7 @@ alter table public.messages enable row level security;
 alter table public.school_visits enable row level security;
 alter table public.school_follow_ups enable row level security;
 alter table public.school_sales enable row level security;
+alter table public.pipeline_history enable row level security;
 alter table public.school_sample_distributions enable row level security;
 
 drop policy if exists "users_can_manage_own_row" on public.users;
@@ -864,6 +908,20 @@ for all
 to authenticated
 using (agent_id = auth.uid() or public.is_manager_or_admin())
 with check (agent_id = auth.uid() or public.is_manager_or_admin());
+
+drop policy if exists "authenticated_can_view_pipeline_history" on public.pipeline_history;
+create policy "authenticated_can_view_pipeline_history"
+on public.pipeline_history
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.school_sales s
+    where s.id = pipeline_id
+      and (s.agent_id = auth.uid() or public.is_manager_or_admin())
+  )
+);
 
 drop policy if exists "agents_can_manage_school_sample_distributions" on public.school_sample_distributions;
 create policy "agents_can_manage_school_sample_distributions"
