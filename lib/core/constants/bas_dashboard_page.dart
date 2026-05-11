@@ -1,0 +1,131 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../core/constants/bas_screens.dart';
+import '../../core/constants/colors.dart';
+import '../../features/admin/users_list_page.dart';
+
+class BasDashboardPage extends StatelessWidget {
+  const BasDashboardPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('BAS Dashboard'),
+        backgroundColor: AppColors.primaryDark,
+        foregroundColor: AppColors.surfaceWhite,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              if (context.mounted) {
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/',
+                  (route) => false,
+                );
+              }
+            },
+            tooltip: 'Logout',
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Welcome, BAS User!',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Manage your regional overview and approvals below.',
+              style: TextStyle(fontSize: 16, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 30),
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                children: [
+                  _buildDashboardCard(
+                    context,
+                    Icons.map_outlined,
+                    'Regional Coverage',
+                    AppColors.infoBlue,
+                    const BasRegionalCoverageScreen(),
+                  ),
+                  _buildDashboardCard(
+                    context,
+                    Icons.analytics_outlined,
+                    'Sales Reports',
+                    AppColors.primaryGreen,
+                    const BasSalesReportsScreen(),
+                  ),
+                  _buildDashboardCard(
+                    context,
+                    Icons.approval_outlined,
+                    'Approve Orders',
+                    AppColors.accentOrange,
+                    const BasApproveOrdersScreen(),
+                  ),
+                  _buildDashboardCard(
+                    context,
+                    Icons.group_outlined,
+                    'Team Overview',
+                    AppColors.softGold,
+                    const UsersListPage(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashboardCard(
+    BuildContext context,
+    IconData icon,
+    String title,
+    Color color,
+    Widget destination,
+  ) {
+    return Card(
+      color: AppColors.surfaceWhite,
+      elevation: 2,
+      clipBehavior:
+          Clip.antiAlias, // Ensures the ripple effect doesn't break rounded corners
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => destination),
+          );
+        },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 48, color: color),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

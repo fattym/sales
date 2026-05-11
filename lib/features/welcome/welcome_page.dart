@@ -1,0 +1,160 @@
+import 'auth/login_page.dart';
+import 'package:flutter/material.dart';
+import '../../core/constants/colors.dart';
+
+class WelcomePage extends StatelessWidget {
+  const WelcomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: NetworkImage(
+              'https://www.longhornpublishers.com/wp-content/uploads/2024/01/schoolgirl-hero-1-1536x950.png',
+            ),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.primaryGreen.withValues(alpha: 0.85),
+                AppColors.textDark.withValues(alpha: 0.95),
+              ],
+            ),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Spacer(),
+
+                  // App Branding
+                  const Text(
+                    "Welcome to",
+                    style: TextStyle(
+                      color: AppColors.surfaceWhite,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'assets/images/icons/download-removebg-preview.png',
+                      height: 120,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  const Text(
+                    "Your complete publisher portal for managing school accounts, tasks, and workflows.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.primaryPale,
+                      fontSize: 16,
+                      height: 1.4,
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // Get Started Button
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const DeHeusLogin(),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentOrange,
+                      foregroundColor: AppColors.surfaceWhite,
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      "Get Started",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // About Button
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      showAboutDialog(
+                        context: context,
+                        applicationName: 'Longhorn Publishers PLC',
+                        applicationVersion: '1.0.0',
+                        applicationIcon: Container(
+                          padding: const EdgeInsets.all(8),
+                          color: Colors.white,
+                          child: Image.asset(
+                            'assets/images/icons/download-removebg-preview.png',
+                            height: 50,
+                          ),
+                        ),
+                        children: [
+                          const Text(
+                            'This portal allows you to manage school accounts and publication workflows seamlessly.',
+                          ),
+                        ],
+                      );
+                    },
+                    icon: const Icon(Icons.info_outline),
+                    label: const Text('About'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primaryPale,
+                      side: const BorderSide(
+                        color: AppColors.primaryLight,
+                        width: 1.5,
+                      ),
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

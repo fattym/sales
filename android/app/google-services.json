@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "988637286390",
+    "project_id": "dehus-45f9d",
+    "storage_bucket": "dehus-45f9d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:988637286390:android:cd1b533f97e03fb5cfc1d7",
+        "android_client_info": {
+          "package_name": "com.example.dehus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAPgq0lMNJHOWoBmnrB07IiYNn4kQQtDjQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
