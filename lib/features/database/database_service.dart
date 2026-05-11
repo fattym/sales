@@ -5,6 +5,7 @@ import '../../models/message_model.dart';
 import '../../models/catalog_item_model.dart';
 import '../../models/order_item_model.dart';
 import '../../models/order_model.dart';
+import '../../models/school_sale_model.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -455,6 +456,53 @@ class DatabaseService {
       await _supabase.from('messages').update({'is_read': true}).eq('id', id);
     } catch (e) {
       debugPrint("Error marking message read: $e");
+      rethrow;
+    }
+  }
+
+  Future<SchoolSaleModel?> getLatestSchoolSale(String schoolId) async {
+    try {
+      final data = await _supabase
+          .from('school_sales')
+          .select()
+          .eq('school_id', schoolId)
+          .order('updated_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (data == null) return null;
+      return SchoolSaleModel.fromMap(Map<String, dynamic>.from(data));
+    } catch (e) {
+      debugPrint("Error loading latest school sale: $e");
+      return null;
+    }
+  }
+
+  Future<void> saveSchoolSale(SchoolSaleModel sale) async {
+    try {
+      await _supabase.from('school_sales').upsert(sale.toMap());
+    } catch (e) {
+      debugPrint("Error saving school sale: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> createSchoolFollowUp({
+    required String schoolId,
+    required String nextStep,
+    required DateTime dueAt,
+    String? notes,
+  }) async {
+    try {
+      await _supabase.from('school_follow_ups').insert({
+        'school_id': schoolId,
+        'agent_id': getCurrentUserId(),
+        'next_step': nextStep,
+        'due_at': dueAt.toIso8601String(),
+        'notes': notes,
+        'follow_up_status': 'open',
+      });
+    } catch (e) {
+      debugPrint("Error creating school follow-up: $e");
       rethrow;
     }
   }

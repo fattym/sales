@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/colors.dart';
+import '../database/database_service.dart';
+import '../../models/pipeline_stage.dart';
+import '../../models/school_sale_model.dart';
 import 'add_order_page.dart';
 
 class SchoolSellPage extends StatefulWidget {
@@ -12,13 +15,34 @@ class SchoolSellPage extends StatefulWidget {
 }
 
 class _SchoolSellPageState extends State<SchoolSellPage> {
+  final _databaseService = DatabaseService();
   final _packageController = TextEditingController();
   final _notesController = TextEditingController();
   final _amountController = TextEditingController();
   final _receiptController = TextEditingController();
+  final _nextActionController = TextEditingController();
+  final _contactPersonController = TextEditingController();
+  final _sampleQtyController = TextEditingController();
+  final _quoteRefController = TextEditingController();
+  final _decisionOwnerController = TextEditingController();
+  final _negotiationTopicController = TextEditingController();
+  final _lossReasonController = TextEditingController();
+  final _dormantReasonController = TextEditingController();
   bool _saving = false;
-  bool _checkoutConfirmed = false;
+  bool _loadingPipeline = true;
+  int? _currentRole;
   String? _paymentMethod;
+  String? _saleId;
+  PipelineStage _currentStage = PipelineStage.lead;
+  PipelineStage _selectedStage = PipelineStage.lead;
+  DateTime? _expectedCloseDate;
+  DateTime? _nextActionDueDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContext();
+  }
 
   @override
   void dispose() {
@@ -26,79 +50,266 @@ class _SchoolSellPageState extends State<SchoolSellPage> {
     _notesController.dispose();
     _amountController.dispose();
     _receiptController.dispose();
+    _nextActionController.dispose();
+    _contactPersonController.dispose();
+    _sampleQtyController.dispose();
+    _quoteRefController.dispose();
+    _decisionOwnerController.dispose();
+    _negotiationTopicController.dispose();
+    _lossReasonController.dispose();
+    _dormantReasonController.dispose();
     super.dispose();
   }
 
-  String _checkoutTitle() {
-    switch (_paymentMethod) {
-      case 'cash':
-        return 'Cash Checkout';
-      case 'mpesa':
-        return 'M-Pesa Checkout';
-      case 'bank':
-        return 'Bank Checkout';
+  Future<void> _loadContext() async {
+    final role = await _databaseService.getCurrentUserRole();
+    final schoolId = widget.school['id']?.toString();
+    if (schoolId == null || schoolId.isEmpty) {
+      setState(() {
+        _currentRole = role;
+        _loadingPipeline = false;
+      });
+      return;
+    }
+
+    final latestSale = await _databaseService.getLatestSchoolSale(schoolId);
+    if (!mounted) return;
+
+    if (latestSale != null) {
+      _saleId = latestSale.id;
+      _currentStage = latestSale.stage;
+      _selectedStage = latestSale.stage;
+      _expectedCloseDate = latestSale.expectedCloseDate;
+    }
+
+    setState(() {
+      _currentRole = role;
+      _loadingPipeline = false;
+    });
+  }
+
+  bool get _isViewOnlyRole => _currentRole == 1 || _currentRole == 2;
+  bool get _isCheckoutStage => _selectedStage == PipelineStage.won;
+
+  List<_StageFieldConfig> get _stageFields {
+    switch (_selectedStage) {
+      case PipelineStage.contacted:
+        return [
+          _StageFieldConfig(
+            label: 'Contact Person',
+            controller: _contactPersonController,
+            required: true,
+          ),
+        ];
+      case PipelineStage.sampleIssued:
+        return [
+          _StageFieldConfig(
+            label: 'Sample Quantity',
+            controller: _sampleQtyController,
+            required: true,
+            numeric: true,
+          ),
+        ];
+      case PipelineStage.quotationSent:
+        return [
+          _StageFieldConfig(
+            label: 'Quotation Reference',
+            controller: _quoteRefController,
+            required: true,
+          ),
+        ];
+      case PipelineStage.decisionPending:
+        return [
+          _StageFieldConfig(
+            label: 'Decision Owner',
+            controller: _decisionOwnerController,
+            required: true,
+          ),
+        ];
+      case PipelineStage.negotiation:
+        return [
+          _StageFieldConfig(
+            label: 'Negotiation Topic',
+            controller: _negotiationTopicController,
+            required: true,
+          ),
+        ];
+      case PipelineStage.lost:
+        return [
+          _StageFieldConfig(
+            label: 'Loss Reason',
+            controller: _lossReasonController,
+            required: true,
+          ),
+        ];
+      case PipelineStage.dormant:
+        return [
+          _StageFieldConfig(
+            label: 'Dormancy Reason',
+            controller: _dormantReasonController,
+            required: true,
+          ),
+        ];
       default:
-        return 'Checkout';
+        return const [];
     }
   }
 
-  String _checkoutSubtitle() {
-    switch (_paymentMethod) {
-      case 'cash':
-        return 'Collect the cash, confirm the amount, and record the receipt note.';
-      case 'mpesa':
-        return 'Share the payment prompt and capture the transaction reference.';
-      case 'bank':
-        return 'Share the bank details and record the deposit reference.';
-      default:
-        return 'Choose a payment method to continue.';
+  String _buildStageContextNotes() {
+    final parts = <String>[];
+    for (final field in _stageFields) {
+      final value = field.controller.text.trim();
+      if (value.isNotEmpty) {
+        parts.add('${field.label}: $value');
+      }
     }
-  }
-
-  String _paymentInstructions() {
-    switch (_paymentMethod) {
-      case 'cash':
-        return 'Cash payment selected. Confirm the collected amount at the school and mark the sale as paid.';
-      case 'mpesa':
-        return 'M-Pesa selected. Send the number or till details and wait for the payment confirmation.';
-      case 'bank':
-        return 'Bank transfer selected. Share the account details and confirm once the slip is received.';
-      default:
-        return 'Select a payment method to see the checkout procedure.';
-    }
+    if (parts.isEmpty) return '';
+    final lines = parts.join(' | ');
+    return 'Stage Context: $lines';
   }
 
   Future<void> _proceedToOrderBuilder() async {
-    if (_paymentMethod == null) {
+    if (_isViewOnlyRole) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a payment method to continue.')),
+        const SnackBar(
+          content: Text('Your role is view-only for pipeline and checkout.'),
+        ),
+      );
+      return;
+    }
+    double? checkoutAmount;
+    if (_isCheckoutStage) {
+      if (_paymentMethod == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Select a payment method to continue.')),
+        );
+        return;
+      }
+
+      if (_amountController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter the checkout amount.')),
+        );
+        return;
+      }
+
+      checkoutAmount = double.tryParse(_amountController.text.trim());
+      if (checkoutAmount == null || checkoutAmount <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid numeric amount.')),
+        );
+        return;
+      }
+
+      if (_paymentMethod != 'cash' && _receiptController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter the payment reference or receipt.'),
+          ),
+        );
+        return;
+      }
+    }
+
+    final transitionAllowed = canMovePipelineStage(_currentStage, _selectedStage);
+    if (!transitionAllowed && !_isCheckoutStage) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Invalid move: ${_currentStage.label} to ${_selectedStage.label}.',
+          ),
+        ),
       );
       return;
     }
 
-    if (_amountController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter the checkout amount.')),
-      );
-      return;
+    for (final field in _stageFields) {
+      final value = field.controller.text.trim();
+      if (field.required && value.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${field.label} is required.')),
+        );
+        return;
+      }
+      if (field.numeric && value.isNotEmpty && int.tryParse(value) == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${field.label} must be a number.')),
+        );
+        return;
+      }
     }
 
-    final checkoutAmount = double.tryParse(_amountController.text.trim());
-    if (checkoutAmount == null || checkoutAmount <= 0) {
+    if (_selectedStage.isActive &&
+        (_nextActionController.text.trim().isEmpty || _nextActionDueDate == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid numeric amount.')),
-      );
-      return;
-    }
-
-    if (_paymentMethod != 'cash' && _receiptController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter the payment reference or receipt.')),
+        const SnackBar(
+          content: Text('Set a next action and due date for active stages.'),
+        ),
       );
       return;
     }
 
     setState(() => _saving = true);
+    final now = DateTime.now();
+    final schoolId = widget.school['id']?.toString();
+
+    if (schoolId != null && schoolId.isNotEmpty) {
+      try {
+        final contextNotes = _buildStageContextNotes();
+        final mergedNotes = [
+          if (_notesController.text.trim().isNotEmpty) _notesController.text.trim(),
+          if (contextNotes.isNotEmpty) contextNotes,
+        ].join('\n');
+        final sale = SchoolSaleModel(
+          id: _saleId,
+          schoolId: schoolId,
+          agentId: _databaseService.getCurrentUserId(),
+          packageName:
+              _packageController.text.trim().isEmpty
+                  ? 'School Package'
+                  : _packageController.text.trim(),
+          expectedValue: checkoutAmount ?? 0,
+          notes: mergedNotes.isEmpty ? null : mergedNotes,
+          stage: _selectedStage,
+          stageUpdatedAt: now,
+          expectedCloseDate: _expectedCloseDate,
+          probability: _selectedStage.defaultProbability,
+          closedAt: _selectedStage == PipelineStage.won ? now : null,
+          isSynced: false,
+        );
+        await _databaseService.saveSchoolSale(sale);
+        _saleId = sale.id;
+
+        if (_selectedStage.isActive) {
+          await _databaseService.createSchoolFollowUp(
+            schoolId: schoolId,
+            nextStep: _nextActionController.text.trim(),
+            dueAt: _nextActionDueDate!,
+            notes:
+                'Auto-created from stage ${_selectedStage.label}'
+                '${contextNotes.isEmpty ? '' : ' • $contextNotes'}',
+          );
+        }
+
+        _currentStage = _selectedStage;
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save pipeline stage: $e')),
+        );
+        return;
+      }
+    }
+
+    if (!_isCheckoutStage) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pipeline stage saved.')),
+      );
+      return;
+    }
 
     final result = await Navigator.push(
       context,
@@ -109,7 +320,7 @@ class _SchoolSellPageState extends State<SchoolSellPage> {
               initialSchoolName: widget.school['name']?.toString(),
               initialPaymentMethod: _paymentMethod,
               initialPaymentReference: _receiptController.text.trim(),
-              initialCheckoutAmount: checkoutAmount,
+              initialCheckoutAmount: checkoutAmount!,
               initialNotes: _notesController.text.trim(),
               initialPackageName: _packageController.text.trim().isEmpty
                   ? null
@@ -120,10 +331,7 @@ class _SchoolSellPageState extends State<SchoolSellPage> {
 
     if (!mounted) return;
 
-    setState(() {
-      _saving = false;
-      _checkoutConfirmed = result != null;
-    });
+    setState(() => _saving = false);
 
     if (result != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -143,7 +351,7 @@ class _SchoolSellPageState extends State<SchoolSellPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sell to School'),
+        title: const Text('Sales Pipeline & Checkout'),
         backgroundColor: AppColors.primaryGreen,
         foregroundColor: Colors.white,
       ),
@@ -152,104 +360,205 @@ class _SchoolSellPageState extends State<SchoolSellPage> {
         children: [
           _HeaderCard(
             title: schoolName,
-            subtitle: 'Track proposals, package interest, and sales notes.',
+            subtitle:
+                'Move stage, plan next action, then complete checkout if ready.',
             icon: Icons.point_of_sale,
+          ),
+          const SizedBox(height: 20),
+          if (_loadingPipeline)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          if (_isViewOnlyRole)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Role ${_currentRole ?? ""}: view-only mode enabled.',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          const Text(
+            'Pipeline Stage',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<PipelineStage>(
+            value: _selectedStage,
+            decoration: const InputDecoration(
+              labelText: 'Pipeline Stage',
+              border: OutlineInputBorder(),
+            ),
+            items: PipelineStage.values
+                .map(
+                  (stage) => DropdownMenuItem(
+                    value: stage,
+                    child: Text(stage.label),
+                  ),
+                )
+                .toList(),
+            onChanged: (_loadingPipeline || _isViewOnlyRole)
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    setState(() => _selectedStage = value);
+                  },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Current: ${_currentStage.label} • Probability: ${_selectedStage.defaultProbability}%',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _isViewOnlyRole
+                ? null
+                : () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _expectedCloseDate ?? DateTime.now(),
+                firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                lastDate: DateTime.now().add(const Duration(days: 730)),
+              );
+              if (picked == null) return;
+              setState(() => _expectedCloseDate = picked);
+            },
+            icon: const Icon(Icons.event),
+            label: Text(
+              _expectedCloseDate == null
+                  ? 'Set Expected Close Date'
+                  : 'Expected Close: ${_expectedCloseDate!.year}-${_expectedCloseDate!.month.toString().padLeft(2, '0')}-${_expectedCloseDate!.day.toString().padLeft(2, '0')}',
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_stageFields.isNotEmpty) ...[
+            const Text(
+              'Stage Details',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            ..._stageFields.map(
+              (field) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextField(
+                  controller: field.controller,
+                  enabled: !_isViewOnlyRole,
+                  keyboardType:
+                      field.numeric ? TextInputType.number : TextInputType.text,
+                  decoration: InputDecoration(
+                    labelText: field.required ? '${field.label} *' : field.label,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _nextActionController,
+            enabled: !_isViewOnlyRole,
+            decoration: const InputDecoration(
+              labelText: 'Next Action',
+              hintText: 'Required for active stages',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _isViewOnlyRole
+                ? null
+                : () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _nextActionDueDate ?? DateTime.now(),
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked == null) return;
+              setState(() => _nextActionDueDate = picked);
+            },
+            icon: const Icon(Icons.calendar_today),
+            label: Text(
+              _nextActionDueDate == null
+                  ? 'Set Next Action Due Date'
+                  : 'Next Action Due: ${_nextActionDueDate!.year}-${_nextActionDueDate!.month.toString().padLeft(2, '0')}-${_nextActionDueDate!.day.toString().padLeft(2, '0')}',
+            ),
           ),
           const SizedBox(height: 20),
           TextField(
             controller: _packageController,
             decoration: const InputDecoration(
-              labelText: 'Package or Offer',
+              labelText: 'Package or Offer (Optional)',
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           TextField(
             controller: _notesController,
-            maxLines: 4,
+            maxLines: 3,
             decoration: const InputDecoration(
-              labelText: 'Sales Notes',
+              labelText: 'Notes (Optional)',
               border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'Checkout Procedure',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _paymentMethod,
-            decoration: const InputDecoration(
-              labelText: 'Method of Payment',
-              border: OutlineInputBorder(),
+          if (_isCheckoutStage) ...[
+            const Text(
+              'Checkout',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            items: const [
-              DropdownMenuItem(value: 'cash', child: Text('Cash')),
-              DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
-              DropdownMenuItem(value: 'bank', child: Text('Bank Transfer')),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _paymentMethod = value;
-                _checkoutConfirmed = false;
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _amountController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Amount',
-              prefixText: 'KES ',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _receiptController,
-            decoration: InputDecoration(
-              labelText:
-                  _paymentMethod == 'cash'
-                      ? 'Cash Receipt / Note'
-                      : _paymentMethod == 'bank'
-                      ? 'Bank Slip / Reference'
-                      : 'M-Pesa Reference',
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _checkoutTitle(),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(_checkoutSubtitle()),
-                const SizedBox(height: 10),
-                Text(
-                  _paymentInstructions(),
-                  style: const TextStyle(color: Colors.black87),
-                ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _paymentMethod,
+              decoration: const InputDecoration(
+                labelText: 'Method of Payment',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                DropdownMenuItem(value: 'bank', child: Text('Bank Transfer')),
               ],
+              onChanged: (value) => setState(() => _paymentMethod = value),
             ),
-          ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Amount',
+                prefixText: 'KES ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _receiptController,
+              decoration: InputDecoration(
+                labelText:
+                    _paymentMethod == 'cash'
+                        ? 'Cash Receipt / Note'
+                        : _paymentMethod == 'bank'
+                        ? 'Bank Slip / Reference'
+                        : 'M-Pesa Reference',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ] else
+            const Text(
+              'Checkout is available after moving stage to Won.',
+              style: TextStyle(color: Colors.black54),
+            ),
           const SizedBox(height: 20),
           FilledButton.icon(
             onPressed:
-                _saving
+                (_saving || _isViewOnlyRole)
                     ? null
                     : () async => _proceedToOrderBuilder(),
             icon:
@@ -260,15 +569,8 @@ class _SchoolSellPageState extends State<SchoolSellPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                     : const Icon(Icons.shopping_cart_checkout),
-            label: const Text('Proceed to Checkout'),
+            label: Text(_isCheckoutStage ? 'Proceed to Checkout' : 'Save Pipeline'),
           ),
-          if (_checkoutConfirmed) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Checkout method: ${_paymentMethod?.toUpperCase() ?? "N/A"}',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ],
         ],
       ),
     );
@@ -322,4 +624,18 @@ class _HeaderCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _StageFieldConfig {
+  final String label;
+  final TextEditingController controller;
+  final bool required;
+  final bool numeric;
+
+  const _StageFieldConfig({
+    required this.label,
+    required this.controller,
+    this.required = false,
+    this.numeric = false,
+  });
 }

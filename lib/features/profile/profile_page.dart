@@ -323,6 +323,7 @@ import 'bas_alerts_page.dart';
 import 'user_profile_page.dart';
 import 'messages_page.dart';
 import '../../core/constants/grounds_screens.dart';
+import '../../core/constants/agent_screens.dart';
 import '../../features/database/database_service.dart';
 import '../../models/task_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -924,6 +925,13 @@ class SalesDashboard extends StatelessWidget {
             context,
             MaterialPageRoute(builder: (context) => const BasAlertsPage()),
           );
+        } else if (index == 4) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AgentSubmitOrderScreen(),
+            ),
+          );
         }
       },
       items: const [
@@ -936,6 +944,10 @@ class SalesDashboard extends StatelessWidget {
         BottomNavigationBarItem(
           icon: Icon(Icons.notifications_none),
           label: "Alerts",
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.point_of_sale_outlined),
+          label: "Pipeline",
         ),
       ],
     );

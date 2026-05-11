@@ -233,7 +233,7 @@ class _AgentSubmitOrderScreenState extends State<AgentSubmitOrderScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select School for Order'),
+        title: const Text('Select School for Pipeline'),
         backgroundColor: AppColors.primaryDark,
         foregroundColor: AppColors.surfaceWhite,
       ),

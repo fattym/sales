@@ -14,6 +14,7 @@ import '../welcome/auth/login_page.dart';
 import 'users_list_page.dart';
 import 'assign_books_page.dart';
 import 'admin_geofence_map_screen.dart';
+import 'admin_pipeline_data_page.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
@@ -688,6 +689,22 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const AssignBooksPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildSidebarItem(
+                  context,
+                  Icons.account_tree_outlined,
+                  'Pipeline Data',
+                  () {
+                    if (MediaQuery.of(context).size.width < 800) {
+                      Navigator.pop(context);
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminPipelineDataPage(),
                       ),
                     );
                   },

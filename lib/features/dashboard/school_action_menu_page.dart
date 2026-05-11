@@ -125,8 +125,9 @@ class SchoolActionMenuPage extends StatelessWidget {
             },
           ),
           _ActionCard(
-            title: 'Sell',
-            subtitle: 'Record a proposal, package, or order discussion.',
+            title: 'Sales Pipeline & Checkout',
+            subtitle:
+                'Update stage, next action, and create order when ready.',
             icon: Icons.point_of_sale,
             color: Colors.green,
             onTap: () {
@@ -160,7 +161,7 @@ class SchoolActionMenuPage extends StatelessWidget {
 
     final bookCategory = school['book_category']?.toString().toLowerCase();
     final focusAreas = List<String>.from(school['focusAreas'] ?? const []);
-    if (bookCategory == 'book fund') return 'Sell';
+    if (bookCategory == 'book fund') return 'Sales Pipeline';
     if (focusAreas.isNotEmpty) return 'Follow Up';
     return 'Visit';
   }

@@ -11,6 +11,15 @@ class AnalyticsPage extends StatefulWidget {
 
 class _AnalyticsPageState extends State<AnalyticsPage> {
   final _supabase = Supabase.instance.client;
+  static const Set<String> _activePipelineStages = {
+    'lead',
+    'contacted',
+    'meeting_scheduled',
+    'sample_issued',
+    'quotation_sent',
+    'decision_pending',
+    'negotiation',
+  };
 
   bool _isLoading = true;
 
@@ -71,9 +80,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       double wonSales = 0, pipelineSales = 0;
       for (var sale in sales) {
         final amount = (sale['expected_value'] as num?)?.toDouble() ?? 0.0;
-        if (sale['sale_status'] == 'won') {
+        final stage = (sale['sale_status'] as String?)?.toLowerCase() ?? '';
+        if (stage == 'won') {
           wonSales += amount;
-        } else if (sale['sale_status'] == 'pipeline') {
+        } else if (_activePipelineStages.contains(stage)) {
           pipelineSales += amount;
         }
       }

@@ -84,20 +84,63 @@ CREATE TABLE IF NOT EXISTS public.orders (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 6. School Sales Table (For Pipeline Analytics)
-CREATE TABLE IF NOT EXISTS public.school_sales (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    school_id UUID REFERENCES public.schools(id) ON DELETE CASCADE,
-    agent_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
-    package_name TEXT NOT NULL,
-    expected_value NUMERIC(12,2),
-    notes TEXT,
-    sale_status TEXT NOT NULL DEFAULT 'draft',
-    closed_at TIMESTAMP WITH TIME ZONE,
-    "isSynced" BOOLEAN NOT NULL DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- 6. School Sales Pipeline migrations
+-- Source of truth schema lives in schema.sql; keep only ALTER/DO migrations here.
+
+DO $$ BEGIN
+    ALTER TABLE public.school_sales
+        ADD COLUMN IF NOT EXISTS stage_contact_person TEXT,
+        ADD COLUMN IF NOT EXISTS sample_quantity INTEGER,
+        ADD COLUMN IF NOT EXISTS quotation_reference TEXT,
+        ADD COLUMN IF NOT EXISTS decision_owner TEXT,
+        ADD COLUMN IF NOT EXISTS negotiation_topic TEXT,
+        ADD COLUMN IF NOT EXISTS loss_reason TEXT,
+        ADD COLUMN IF NOT EXISTS dormant_reason TEXT,
+        ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP WITH TIME ZONE,
+        ADD COLUMN IF NOT EXISTS expected_close_date DATE,
+        ADD COLUMN IF NOT EXISTS probability INTEGER NOT NULL DEFAULT 0;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    UPDATE public.school_sales
+    SET sale_status = 'lead'
+    WHERE sale_status IN ('draft', 'pipeline') OR sale_status IS NULL;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE public.school_sales
+    ALTER COLUMN sale_status SET DEFAULT 'lead';
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE public.school_sales
+    DROP CONSTRAINT IF EXISTS school_sales_sale_status_check;
+    ALTER TABLE public.school_sales
+    DROP CONSTRAINT IF EXISTS school_sales_sample_quantity_check;
+    ALTER TABLE public.school_sales
+    ADD CONSTRAINT school_sales_sale_status_check CHECK (
+        sale_status IN (
+            'lead',
+            'contacted',
+            'meeting_scheduled',
+            'sample_issued',
+            'quotation_sent',
+            'decision_pending',
+            'negotiation',
+            'won',
+            'lost',
+            'dormant'
+        )
+    );
+    ALTER TABLE public.school_sales
+    ADD CONSTRAINT school_sales_sample_quantity_check CHECK (
+        sample_quantity IS NULL OR sample_quantity >= 0
+    );
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
 -- Enable Row Level Security (RLS) on all new tables
 ALTER TABLE public.route_plans ENABLE ROW LEVEL SECURITY;
