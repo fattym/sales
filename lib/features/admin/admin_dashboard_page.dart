@@ -27,6 +27,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   late Future<_AdminDashboardData> _dashboardFuture;
 
   String? _selectedUserIdForMap;
+  String? _selectedUserIdForTasks;
+  String _taskTimeFilter = 'All'; // 'All', 'Daily', 'Weekly', 'Monthly'
 
   @override
   void initState() {
@@ -294,6 +296,65 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       geofences: <Map<String, dynamic>>[],
                     );
 
+                List<TaskModel> filteredTasks = data.tasks;
+
+                if (_selectedUserIdForTasks != null) {
+                  final selectedUser = data.users.firstWhere(
+                    (u) => u.id == _selectedUserIdForTasks,
+                    orElse: () => data.users.first,
+                  );
+                  filteredTasks =
+                      filteredTasks.where((t) {
+                        return t.targetRole == 0 ||
+                            t.targetRole == selectedUser.role;
+                      }).toList();
+                }
+
+                if (_taskTimeFilter != 'All') {
+                  final now = DateTime.now();
+                  filteredTasks =
+                      filteredTasks.where((t) {
+                        if (t.dueAt == null) return false;
+                        final due = t.dueAt!;
+                        if (_taskTimeFilter == 'Daily') {
+                          return due.year == now.year &&
+                              due.month == now.month &&
+                              due.day == now.day;
+                        } else if (_taskTimeFilter == 'Weekly') {
+                          final startOfWeek = now.subtract(
+                            Duration(days: now.weekday % 7),
+                          );
+                          final endOfWeek = startOfWeek.add(
+                            const Duration(days: 6),
+                          );
+                          final dueDateOnly = DateTime(
+                            due.year,
+                            due.month,
+                            due.day,
+                          );
+                          final startOnly = DateTime(
+                            startOfWeek.year,
+                            startOfWeek.month,
+                            startOfWeek.day,
+                          );
+                          final endOnly = DateTime(
+                            endOfWeek.year,
+                            endOfWeek.month,
+                            endOfWeek.day,
+                          );
+                          return dueDateOnly.isAfter(
+                                startOnly.subtract(const Duration(days: 1)),
+                              ) &&
+                              dueDateOnly.isBefore(
+                                endOnly.add(const Duration(days: 1)),
+                              );
+                        } else if (_taskTimeFilter == 'Monthly') {
+                          return due.year == now.year && due.month == now.month;
+                        }
+                        return true;
+                      }).toList();
+                }
+
                 return RefreshIndicator(
                   onRefresh: () async => _refreshDashboard(),
                   child: ListView(
@@ -312,13 +373,90 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       _buildSectionHeader(
                         "Tasks",
                         subtitle:
-                            "Create and review tasks assigned to specific roles.",
+                            "Filter and review tasks assigned to specific people or roles.",
                       ),
                       const SizedBox(height: 12),
-                      if (data.tasks.isEmpty)
-                        _buildEmptyCard("No tasks created yet.")
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String?>(
+                              value: _selectedUserIdForTasks,
+                              decoration: InputDecoration(
+                                labelText: 'Filter by Person',
+                                filled: true,
+                                fillColor: Colors.white,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                ),
+                              ),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: null,
+                                  child: Text('All Users'),
+                                ),
+                                ...data.users.map(
+                                  (u) => DropdownMenuItem(
+                                    value: u.id,
+                                    child: Text(
+                                      u.fullName ?? u.email,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged:
+                                  (val) => setState(
+                                    () => _selectedUserIdForTasks = val,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: _taskTimeFilter,
+                              decoration: InputDecoration(
+                                labelText: 'Timeframe',
+                                filled: true,
+                                fillColor: Colors.white,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                ),
+                              ),
+                              items:
+                                  ['All', 'Daily', 'Weekly', 'Monthly']
+                                      .map(
+                                        (f) => DropdownMenuItem(
+                                          value: f,
+                                          child: Text(f),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged:
+                                  (val) =>
+                                      setState(() => _taskTimeFilter = val!),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (filteredTasks.isEmpty)
+                        _buildEmptyCard("No tasks match the selected filters.")
                       else
-                        ...data.tasks.map(
+                        ...filteredTasks.map(
                           (task) => Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: _TaskCard(task: task),
