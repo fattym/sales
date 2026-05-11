@@ -2,6 +2,7 @@ import 'create_school_screen.dart';
 import 'package:flutter/material.dart';
 import 'admin_assign_task_screen.dart';
 import 'admin_create_route_screen.dart';
+import 'analytics_page.dart';
 import 'catalog_import_page.dart';
 import 'import_schools_page.dart';
 import 'add_sample_book_page.dart';
@@ -298,6 +299,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const MessagesPage()),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _buildDashboardCard(
+              context: context,
+              icon: Icons.analytics_outlined,
+              title: 'Analytics',
+              subtitle: 'Review trends and operational metrics.',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AnalyticsPage(),
+                  ),
                 );
               },
             ),

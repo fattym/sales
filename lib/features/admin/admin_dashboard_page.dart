@@ -7,6 +7,7 @@ import '../database/database_service.dart';
 import '../../../models/farmer_model.dart';
 import '../../../models/task_model.dart';
 import '../../../models/user_model.dart';
+import 'analytics_page.dart';
 import 'catalog_import_page.dart';
 import '../profile/messages_page.dart';
 import '../welcome/auth/login_page.dart';
@@ -24,6 +25,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   final DatabaseService _dbService = DatabaseService();
   late Future<_AdminDashboardData> _dashboardFuture;
 
+  String? _selectedUserIdForMap;
+
   @override
   void initState() {
     super.initState();
@@ -34,7 +37,23 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     final users = await _dbService.getAllUsers();
     final schools = await _dbService.getAllSchools();
     final tasks = await _dbService.getAllTasks();
-    return _AdminDashboardData(users: users, schools: schools, tasks: tasks);
+
+    List<Map<String, dynamic>> routePlansData = [];
+    try {
+      final res = await Supabase.instance.client.from('route_plans').select();
+      routePlansData = List<Map<String, dynamic>>.from(
+        (res as List).map((x) => Map<String, dynamic>.from(x as Map)),
+      );
+    } catch (e) {
+      debugPrint('Error fetching route plans: $e');
+    }
+
+    return _AdminDashboardData(
+      users: users,
+      schools: schools,
+      tasks: tasks,
+      routePlans: routePlansData,
+    );
   }
 
   void _refreshDashboard() {
@@ -259,6 +278,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       users: <UserModel>[],
                       schools: <SchoolModel>[],
                       tasks: <TaskModel>[],
+                      routePlans: <Map<String, dynamic>>[],
                     );
 
                 return RefreshIndicator(
@@ -268,7 +288,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                     children: [
                       _buildHeroCard(),
                       const SizedBox(height: 20),
-                      _buildSchoolsMap(data.schools),
+                      _buildSchoolsMap(
+                        context,
+                        data.schools,
+                        data.users,
+                        data.routePlans,
+                      ),
                       const SizedBox(height: 20),
                       _buildSectionHeader(
                         "Tasks",
@@ -436,6 +461,22 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 }),
                 _buildSidebarItem(
                   context,
+                  Icons.analytics_outlined,
+                  'Analytics',
+                  () async {
+                    if (MediaQuery.of(context).size.width < 800) {
+                      Navigator.pop(context);
+                    }
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AnalyticsPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildSidebarItem(
+                  context,
                   Icons.upload_file,
                   'Import Catalog',
                   () async {
@@ -534,13 +575,37 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-  Widget _buildSchoolsMap(List<SchoolModel> schools) {
-    final validSchools =
+  Widget _buildSchoolsMap(
+    BuildContext context,
+    List<SchoolModel> schools,
+    List<UserModel> users,
+    List<Map<String, dynamic>> routePlans,
+  ) {
+    List<SchoolModel> mapSchools =
         schools
             .where(
               (school) => school.latitude != null && school.longitude != null,
             )
             .toList();
+
+    List<Map<String, dynamic>> userRoutePlans = [];
+    if (_selectedUserIdForMap != null) {
+      userRoutePlans =
+          routePlans
+              .where((r) => r['assigned_to'] == _selectedUserIdForMap)
+              .toList();
+      final routeSchoolIds = <String>{};
+      for (final r in userRoutePlans) {
+        final idsRaw = r['school_ids'];
+        if (idsRaw != null) {
+          routeSchoolIds.addAll(List<String>.from(idsRaw as List));
+        }
+      }
+      mapSchools =
+          mapSchools.where((s) => routeSchoolIds.contains(s.id)).toList();
+    }
+
+    final polylines = _buildRoutePolylines(userRoutePlans, schools);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,6 +615,43 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           subtitle: "Dots represent schools with saved latitude and longitude.",
         ),
         const SizedBox(height: 12),
+
+        // Filter Dropdown
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: _selectedUserIdForMap,
+              hint: const Text('All Users (No Route Filter)'),
+              isExpanded: true,
+              icon: const Icon(Icons.filter_list),
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('All Users (No Route Filter)'),
+                ),
+                ...{for (var u in users) u.id: u}.values.map(
+                  (u) => DropdownMenuItem(
+                    value: u.id,
+                    child: Text('${u.fullName ?? u.email} (Role ${u.role})'),
+                  ),
+                ),
+              ],
+              onChanged: (val) {
+                setState(() {
+                  _selectedUserIdForMap = val;
+                });
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
         Container(
           height: 320,
           decoration: BoxDecoration(
@@ -565,12 +667,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           ),
           clipBehavior: Clip.antiAlias,
           child:
-              validSchools.isEmpty
+              mapSchools.isEmpty
                   ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'No school GPS coordinates found yet.\nSave a school profile to see dots here.',
+                        _selectedUserIdForMap == null
+                            ? 'No school GPS coordinates found yet.\nSave a school profile to see dots here.'
+                            : 'No schools found for this user\'s route plans.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.grey[700]),
                       ),
@@ -578,8 +682,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   )
                   : FlutterMap(
                     options: MapOptions(
-                      initialCenter: _mapCenter(validSchools),
-                      initialZoom: validSchools.length > 1 ? 6.3 : 11.5,
+                      initialCenter: _mapCenter(mapSchools),
+                      initialZoom: mapSchools.length > 1 ? 6.3 : 11.5,
                       minZoom: 2,
                       maxZoom: 18,
                       backgroundColor: const Color(0xFFE9EFE8),
@@ -590,7 +694,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'dehus.longhorn.publishers',
                       ),
-                      MarkerLayer(markers: _schoolMarkers(validSchools)),
+                      PolylineLayer(polylines: polylines),
+                      MarkerLayer(markers: _schoolMarkers(context, mapSchools)),
                     ],
                   ),
         ),
@@ -604,49 +709,198 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     }
 
     final latitudes = schools
-        .map((school) => school.latitude!)
+        .map((school) => school.latitude!.toDouble())
         .toList(growable: false);
     final longitudes = schools
-        .map((school) => school.longitude!)
+        .map((school) => school.longitude!.toDouble())
         .toList(growable: false);
     final avgLat = latitudes.reduce((a, b) => a + b) / latitudes.length;
     final avgLng = longitudes.reduce((a, b) => a + b) / longitudes.length;
     return LatLng(avgLat, avgLng);
   }
 
-  List<Marker> _schoolMarkers(List<SchoolModel> schools) {
+  List<Polyline> _buildRoutePolylines(
+    List<Map<String, dynamic>> userRoutes,
+    List<SchoolModel> allSchools,
+  ) {
+    final polylines = <Polyline>[];
+    final colors = [
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.red,
+    ];
+    int colorIndex = 0;
+
+    for (final route in userRoutes) {
+      final schoolIdsRaw = route['school_ids'];
+      if (schoolIdsRaw == null) continue;
+
+      final schoolIds =
+          (schoolIdsRaw as List).map((e) => e.toString()).toList();
+      final points = <LatLng>[];
+
+      for (final id in schoolIds) {
+        final school = allSchools.where((s) => s.id == id).firstOrNull;
+        if (school != null &&
+            school.latitude != null &&
+            school.longitude != null) {
+          points.add(
+            LatLng(school.latitude!.toDouble(), school.longitude!.toDouble()),
+          );
+        }
+      }
+
+      if (points.length > 1) {
+        polylines.add(
+          Polyline(
+            points: points,
+            color: colors[colorIndex % colors.length],
+            strokeWidth: 3.5,
+          ),
+        );
+        colorIndex++;
+      }
+    }
+    return polylines;
+  }
+
+  List<Marker> _schoolMarkers(BuildContext context, List<SchoolModel> schools) {
     return schools
         .where((school) => school.latitude != null && school.longitude != null)
         .map(
           (school) => Marker(
-            point: LatLng(school.latitude!, school.longitude!),
-            width: 34,
-            height: 34,
-            child: Tooltip(
-              message: school.name,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.longhornMaroon.withValues(alpha: 0.95),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.longhornMaroon.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.location_on,
-                  size: 18,
-                  color: Colors.white,
+            point: LatLng(
+              school.latitude!.toDouble(),
+              school.longitude!.toDouble(),
+            ),
+            width: 44, // Slightly larger hit area for easier tapping
+            height: 44,
+            child: GestureDetector(
+              onTap: () => _showSchoolDetails(context, school),
+              child: Tooltip(
+                message: school.name,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.longhornMaroon.withValues(alpha: 0.95),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.longhornMaroon.withValues(alpha: 0.35),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.location_on,
+                    size: 20,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
           ),
         )
         .toList();
+  }
+
+  void _showSchoolDetails(BuildContext context, SchoolModel school) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.school,
+                      size: 32,
+                      color: AppColors.longhornMaroon,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        school.name,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  leading: const Icon(
+                    Icons.phone_outlined,
+                    color: AppColors.primaryGreen,
+                  ),
+                  title: const Text('Phone Number'),
+                  subtitle: Text(school.phone ?? 'Not provided'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(
+                    Icons.map_outlined,
+                    color: AppColors.primaryGreen,
+                  ),
+                  title: const Text('County'),
+                  subtitle: Text(school.county ?? 'Not provided'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(
+                    Icons.my_location,
+                    color: AppColors.primaryGreen,
+                  ),
+                  title: const Text('GPS Coordinates'),
+                  subtitle: Text(
+                    '${school.latitude?.toStringAsFixed(4)}, ${school.longitude?.toStringAsFixed(4)}',
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.longhornMaroon,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text(
+                      'Close Details',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -660,6 +914,9 @@ class _UserRoleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isAdmin = user.role == 1;
     final roleValue = user.role;
+
+    final validRoles = [1, 2, 3, 4, 5];
+    final initialRole = validRoles.contains(roleValue) ? roleValue : null;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -738,8 +995,8 @@ class _UserRoleCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<int>(
-                  initialValue: user.role,
+                child: DropdownButtonFormField<int?>(
+                  initialValue: initialRole,
                   decoration: InputDecoration(
                     labelText: 'Role ID',
                     border: OutlineInputBorder(
@@ -750,15 +1007,20 @@ class _UserRoleCard extends StatelessWidget {
                       vertical: 14,
                     ),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 1, child: Text('1 - Admin')),
-                    DropdownMenuItem(
+                  items: [
+                    if (initialRole == null)
+                      DropdownMenuItem(
+                        value: null,
+                        child: Text('${roleValue ?? "None"} - Unknown'),
+                      ),
+                    const DropdownMenuItem(value: 1, child: Text('1 - Admin')),
+                    const DropdownMenuItem(
                       value: 2,
                       child: Text('2 - Sales Manager'),
                     ),
-                    DropdownMenuItem(value: 3, child: Text('3 - BAS')),
-                    DropdownMenuItem(value: 4, child: Text('4 - Agent')),
-                    DropdownMenuItem(
+                    const DropdownMenuItem(value: 3, child: Text('3 - BAS')),
+                    const DropdownMenuItem(value: 4, child: Text('4 - Agent')),
+                    const DropdownMenuItem(
                       value: 5,
                       child: Text('5 - Grounds Person'),
                     ),
@@ -795,11 +1057,13 @@ class _AdminDashboardData {
     required this.users,
     required this.schools,
     required this.tasks,
+    required this.routePlans,
   });
 
   final List<UserModel> users;
   final List<SchoolModel> schools;
   final List<TaskModel> tasks;
+  final List<Map<String, dynamic>> routePlans;
 }
 
 class _TaskCard extends StatelessWidget {
