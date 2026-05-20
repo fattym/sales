@@ -24,6 +24,7 @@ class _AdminGeofenceMapScreenState extends State<AdminGeofenceMapScreen> {
   String? _selectedCountyFilter;
   bool _isLoadingUsers = true;
   bool _isMapReady = false;
+  bool _showControlPanel = false;
 
   // Geofence states
   LatLng? _selectedLocation;
@@ -696,13 +697,15 @@ class _AdminGeofenceMapScreenState extends State<AdminGeofenceMapScreen> {
       appBar: AppBar(title: const Text('Assign Geofence')),
       body:
           isDesktop
-              ? Row(
+              ? Column(
                 children: [
-                  Expanded(child: mapContent),
+                  Expanded(
+                    child: mapContent,
+                  ),
                   SizedBox(
-                    width: 350,
-                    child: Center(
-                      child: SingleChildScrollView(child: controlPanel),
+                    height: 300,
+                    child: SingleChildScrollView(
+                      child: controlPanel,
                     ),
                   ),
                 ],
@@ -715,11 +718,41 @@ class _AdminGeofenceMapScreenState extends State<AdminGeofenceMapScreen> {
                     right: 0,
                     bottom: 0,
                     child: SafeArea(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.5,
-                        ),
-                        child: SingleChildScrollView(child: controlPanel),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _showControlPanel = !_showControlPanel;
+                                  });
+                                },
+                                icon: Icon(
+                                  _showControlPanel
+                                      ? Icons.keyboard_arrow_down
+                                      : Icons.keyboard_arrow_up,
+                                ),
+                                label: Text(
+                                  _showControlPanel
+                                      ? 'Hide Geofence Controls'
+                                      : 'Show Geofence Controls',
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (_showControlPanel)
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight:
+                                    MediaQuery.of(context).size.height * 0.38,
+                              ),
+                              child: SingleChildScrollView(child: controlPanel),
+                            ),
+                        ],
                       ),
                     ),
                   ),

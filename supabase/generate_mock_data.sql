@@ -52,14 +52,15 @@ stage_matrix as (
   ) as t(rn, stage, expected_value)
 )
 insert into public.school_sales (
-  id, school_id, sale_status, expected_value, stage_updated_at, probability, notes, "isSynced"
+  id, school_id, package_name, sale_status, expected_value, stage_updated_at, probability, notes, "isSynced"
 )
 select
   ('91000000-0000-0000-0000-' || lpad(ss.rn::text, 12, '0'))::uuid as id,
   ss.id as school_id,
+  'Generated Demo Package' as package_name,
   sm.stage,
   sm.expected_value,
-  now() - make_interval(days => ss.rn),
+  now() - ((ss.rn::text || ' days')::interval),
   case sm.stage
     when 'won' then 100
     when 'negotiation' then 75
@@ -74,6 +75,7 @@ select
 from selected_schools ss
 join stage_matrix sm on sm.rn = ss.rn
 on conflict (id) do update set
+  package_name = excluded.package_name,
   sale_status = excluded.sale_status,
   expected_value = excluded.expected_value,
   stage_updated_at = excluded.stage_updated_at,

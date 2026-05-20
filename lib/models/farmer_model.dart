@@ -7,6 +7,10 @@ class SchoolModel {
   final String county;
   final List<String> focusAreas;
   final String? bookCategory;
+  final String? dealerType;
+  final String? shopCategory;
+  final String? selectedProduct;
+  final String? partnerSubtype;
   final double? latitude;
   final double? longitude;
   final String? photoUrl;
@@ -21,6 +25,8 @@ class SchoolModel {
   final String? notes;
   final String? samplesLeft;
   final String? sampleBook;
+  final String? sampleProofUrl;
+  final String? sampleProofPath;
   final String? schoolOwnership;
   final String? schoolOwnershipOther;
   final int? schoolPopulation;
@@ -37,6 +43,10 @@ class SchoolModel {
     required this.county,
     required this.focusAreas,
     this.bookCategory,
+    this.dealerType,
+    this.shopCategory,
+    this.selectedProduct,
+    this.partnerSubtype,
     this.latitude,
     this.longitude,
     this.photoUrl,
@@ -51,6 +61,8 @@ class SchoolModel {
     this.notes,
     this.samplesLeft,
     this.sampleBook,
+    this.sampleProofUrl,
+    this.sampleProofPath,
     this.schoolOwnership,
     this.schoolOwnershipOther,
     this.schoolPopulation,
@@ -69,6 +81,10 @@ class SchoolModel {
       'county': county,
       'focusAreas': focusAreas,
       'book_category': bookCategory,
+      'dealer_type': dealerType,
+      'shop_category': shopCategory,
+      'selected_product': selectedProduct,
+      'partner_subtype': partnerSubtype,
       'latitude': latitude,
       'longitude': longitude,
       'photo_url': photoUrl,
@@ -83,6 +99,8 @@ class SchoolModel {
       'notes': notes,
       'samples_left': samplesLeft,
       'sample_book': sampleBook,
+      'sample_proof_url': sampleProofUrl,
+      'sample_proof_path': sampleProofPath,
       'school_ownership': schoolOwnership,
       'school_ownership_other': schoolOwnershipOther,
       'school_population': schoolPopulation,
@@ -102,6 +120,10 @@ class SchoolModel {
       county: map['county'],
       focusAreas: List<String>.from(map['focusAreas'] ?? const []),
       bookCategory: map['book_category'] ?? map['bookCategory'],
+      dealerType: map['dealer_type'] ?? map['dealerType'],
+      shopCategory: map['shop_category'] ?? map['shopCategory'],
+      selectedProduct: map['selected_product'] ?? map['selectedProduct'],
+      partnerSubtype: map['partner_subtype'] ?? map['partnerSubtype'],
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
       photoUrl: map['photo_url'] ?? map['photoUrl'],
@@ -116,6 +138,8 @@ class SchoolModel {
       notes: map['notes'],
       samplesLeft: map['samples_left'] ?? map['samplesLeft'],
       sampleBook: map['sample_book'] ?? map['sampleBook'],
+      sampleProofUrl: map['sample_proof_url'] ?? map['sampleProofUrl'],
+      sampleProofPath: map['sample_proof_path'] ?? map['sampleProofPath'],
       schoolOwnership: map['school_ownership'] ?? map['schoolOwnership'],
       schoolOwnershipOther:
           map['school_ownership_other'] ?? map['schoolOwnershipOther'],
@@ -144,6 +168,10 @@ class SchoolModel {
       county: county,
       focusAreas: focusAreas,
       bookCategory: bookCategory,
+      dealerType: dealerType,
+      shopCategory: shopCategory,
+      selectedProduct: selectedProduct,
+      partnerSubtype: partnerSubtype,
       latitude: latitude,
       longitude: longitude,
       photoUrl: photoUrl,
@@ -158,6 +186,8 @@ class SchoolModel {
       notes: notes,
       samplesLeft: samplesLeft,
       sampleBook: sampleBook,
+      sampleProofUrl: sampleProofUrl,
+      sampleProofPath: sampleProofPath,
       schoolOwnership: schoolOwnership,
       schoolOwnershipOther: schoolOwnershipOther,
       schoolPopulation: schoolPopulation,

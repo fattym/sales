@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:typed_data';
+import 'dart:io';
 
 import '../../core/constants/colors.dart';
 import '../../features/database/database_service.dart';
@@ -30,6 +31,11 @@ class _SampleDistributionPageState extends State<SampleDistributionPage> {
   List<CatalogItemModel> _samples = <CatalogItemModel>[];
   int _initialSampleTotal = 0;
   XFile? _recoveredLostPhoto;
+  bool _isLoadingRoi = true;
+  double _roiRevenue = 0.0;
+  double _roiWonValue = 0.0;
+  int _roiSamplesGiven = 0;
+  int _roiSchoolsReached = 0;
 
   @override
   void initState() {
@@ -38,6 +44,7 @@ class _SampleDistributionPageState extends State<SampleDistributionPage> {
     _loadCurrentRole();
     _loadSamples();
     _recoverLostCameraData();
+    _loadRoiSummary();
   }
 
   @override
@@ -57,6 +64,76 @@ class _SampleDistributionPageState extends State<SampleDistributionPage> {
       _schoolsFuture = _dbService.getAllSchools();
     });
     await _loadSamples();
+    await _loadRoiSummary();
+  }
+
+  Future<void> _loadRoiSummary() async {
+    setState(() => _isLoadingRoi = true);
+    try {
+      final supabase = Supabase.instance.client;
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) {
+        if (!mounted) return;
+        setState(() => _isLoadingRoi = false);
+        return;
+      }
+
+      final receiptsRes = await supabase
+          .from('school_sample_distributions')
+          .select('school_id,quantity')
+          .eq('agent_id', userId)
+          .order('distributed_at', ascending: false)
+          .limit(2000);
+      final ordersRes = await supabase
+          .from('orders')
+          .select('checkout_amount,status')
+          .eq('agent_id', userId)
+          .order('created_at', ascending: false)
+          .limit(2000);
+      final salesRes = await supabase
+          .from('school_sales')
+          .select('expected_value,sale_status')
+          .eq('agent_id', userId)
+          .order('created_at', ascending: false)
+          .limit(2000);
+
+      int samplesGiven = 0;
+      final schools = <String>{};
+      for (final row in List<Map<String, dynamic>>.from(receiptsRes)) {
+        samplesGiven += (row['quantity'] as num?)?.toInt() ?? 1;
+        final schoolId = row['school_id']?.toString() ?? '';
+        if (schoolId.isNotEmpty) schools.add(schoolId);
+      }
+
+      double revenue = 0.0;
+      for (final row in List<Map<String, dynamic>>.from(ordersRes)) {
+        final status = (row['status']?.toString().toLowerCase() ?? '');
+        if (status == 'approved' || status == 'paid') {
+          revenue += (row['checkout_amount'] as num?)?.toDouble() ?? 0.0;
+        }
+      }
+
+      double wonValue = 0.0;
+      for (final row in List<Map<String, dynamic>>.from(salesRes)) {
+        final stage = (row['sale_status']?.toString().toLowerCase() ?? '');
+        if (stage == 'won') {
+          wonValue += (row['expected_value'] as num?)?.toDouble() ?? 0.0;
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _roiSamplesGiven = samplesGiven;
+        _roiSchoolsReached = schools.length;
+        _roiRevenue = revenue;
+        _roiWonValue = wonValue;
+        _isLoadingRoi = false;
+      });
+    } catch (e) {
+      debugPrint('Failed to load ROI summary: $e');
+      if (!mounted) return;
+      setState(() => _isLoadingRoi = false);
+    }
   }
 
   Future<void> _loadSamples() async {
@@ -446,6 +523,18 @@ class _SampleDistributionPageState extends State<SampleDistributionPage> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            tooltip: 'All Photos',
+            icon: const Icon(Icons.photo_library_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SampleProofGalleryPage(),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _refreshSchools,
           ),
@@ -460,6 +549,8 @@ class _SampleDistributionPageState extends State<SampleDistributionPage> {
             padding: const EdgeInsets.all(16),
             children: [
               _buildHeader(roleLabel),
+              const SizedBox(height: 16),
+              _buildRoiSummaryCard(),
               const SizedBox(height: 16),
               _buildRemainingTracker(),
               const SizedBox(height: 16),
@@ -514,6 +605,73 @@ class _SampleDistributionPageState extends State<SampleDistributionPage> {
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoiSummaryCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child:
+          _isLoadingRoi
+              ? const SizedBox(
+                height: 56,
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+              : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'My Sample ROI',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _roiChip('Samples Given', '$_roiSamplesGiven'),
+                      _roiChip('Schools Reached', '$_roiSchoolsReached'),
+                      _roiChip('Revenue Earned', 'KES ${_roiRevenue.toStringAsFixed(0)}'),
+                      _roiChip('Won Value', 'KES ${_roiWonValue.toStringAsFixed(0)}'),
+                    ],
+                  ),
+                ],
+              ),
+    );
+  }
+
+  Widget _roiChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F7FA),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -735,6 +893,28 @@ class _SampleDistributionPageState extends State<SampleDistributionPage> {
                         fontSize: 12,
                       ),
                     ),
+                    if (selectedSchool?.sampleProofUrl != null &&
+                        selectedSchool!.sampleProofUrl!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          showDialog<void>(
+                            context: context,
+                            builder:
+                                (_) => Dialog(
+                                  child: InteractiveViewer(
+                                    child: Image.network(
+                                      selectedSchool?.sampleProofUrl ?? '',
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                          );
+                        },
+                        icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                        label: const Text('View Stamped Document'),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -829,5 +1009,411 @@ class _SampleDistributionPageState extends State<SampleDistributionPage> {
           ),
       ],
     );
+  }
+}
+
+class SampleProofGalleryPage extends StatefulWidget {
+  const SampleProofGalleryPage({super.key});
+
+  @override
+  State<SampleProofGalleryPage> createState() => _SampleProofGalleryPageState();
+}
+
+class _SampleProofGalleryPageState extends State<SampleProofGalleryPage> {
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final DatabaseService _dbService = DatabaseService();
+  bool _isLoading = true;
+  String? _error;
+  List<Map<String, dynamic>> _receiptRows = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _proofRows = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _onboardingReceiptProofRows = <Map<String, dynamic>>[];
+  List<SchoolModel> _localProofSchools = <SchoolModel>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      await _dbService.syncData();
+      final receiptResponse = await _supabase
+          .from('school_sample_distributions')
+          .select(
+            'id,sample_name,distributed_at,stamped_receipt_url,stamped_receipt_path,schools(name)',
+          )
+          .not('stamped_receipt_url', 'is', null)
+          .order('distributed_at', ascending: false)
+          .limit(300);
+      final proofResponse = await _supabase
+          .from('schools')
+          .select('id,name,county,sample_proof_url,sample_proof_path,created_at')
+          .not('sample_proof_url', 'is', null)
+          .order('created_at', ascending: false)
+          .limit(300);
+      final onboardingReceiptProofResponse = await _supabase
+          .from('school_sample_distributions')
+          .select(
+            'id,sample_name,distributed_at,stamped_receipt_url,stamped_receipt_path,schools(name,county)',
+          )
+          .eq('sample_category', 'Onboarding')
+          .not('stamped_receipt_url', 'is', null)
+          .order('distributed_at', ascending: false)
+          .limit(300);
+      if (!mounted) return;
+      final localSchools = await _dbService.getAllSchoolProfiles();
+      setState(() {
+        _receiptRows = List<Map<String, dynamic>>.from(
+          (receiptResponse as List).map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+        _proofRows = List<Map<String, dynamic>>.from(
+          (proofResponse as List).map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+        _onboardingReceiptProofRows = List<Map<String, dynamic>>.from(
+          (onboardingReceiptProofResponse as List)
+              .map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+        _localProofSchools = localSchools
+            .where(
+              (s) =>
+                  (s.sampleProofUrl == null || s.sampleProofUrl!.trim().isEmpty) &&
+                  (s.sampleProofPath != null && s.sampleProofPath!.trim().isNotEmpty),
+            )
+            .toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load photos: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Sample Photos'),
+          actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Onboarding Proofs'),
+              Tab(text: 'Stamped Receipts'),
+            ],
+          ),
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(
+                    child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                  )
+                : TabBarView(
+                    children: [
+                      _buildOnboardingProofGrid(),
+                      _buildStampedReceiptGrid(),
+                    ],
+                  ),
+      ),
+    );
+  }
+
+  Widget _buildOnboardingProofGrid() {
+    final fromSchools = _proofRows
+        .where((row) => (row['sample_proof_url']?.toString().trim().isNotEmpty ?? false))
+        .toList();
+    final fromReceipts = _onboardingReceiptProofRows
+        .where((row) =>
+            (row['stamped_receipt_url']?.toString().trim().isNotEmpty ?? false))
+        .toList();
+
+    if (fromSchools.isEmpty && fromReceipts.isEmpty && _localProofSchools.isEmpty) {
+      return const Center(child: Text('No onboarding proof photos yet.'));
+    }
+
+    final mergedCount =
+        fromSchools.length + fromReceipts.length + _localProofSchools.length;
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.88,
+      ),
+      itemCount: mergedCount,
+      itemBuilder: (context, index) {
+        if (index < fromSchools.length) {
+          final row = fromSchools[index];
+          final url = row['sample_proof_url']?.toString() ?? '';
+          final schoolName = row['name']?.toString() ?? 'School';
+          final county = row['county']?.toString() ?? '';
+          return _buildPhotoCard(
+            url: url,
+            title: schoolName,
+            subtitle: county.isEmpty ? 'Onboarding proof' : '$county • Onboarding proof',
+            onDelete: () => _deleteSchoolProof(row),
+          );
+        }
+
+        if (index < fromSchools.length + fromReceipts.length) {
+          final row = fromReceipts[index - fromSchools.length];
+          final url = row['stamped_receipt_url']?.toString() ?? '';
+          final schoolName = row['schools']?['name']?.toString() ?? 'School';
+          final county = row['schools']?['county']?.toString() ?? '';
+          return _buildPhotoCard(
+            url: url,
+            title: schoolName,
+            subtitle: county.isEmpty
+                ? 'Onboarding proof (receipt)'
+                : '$county • Onboarding proof (receipt)',
+            onDelete: () => _deleteReceiptProof(row),
+          );
+        }
+
+        final localSchool =
+            _localProofSchools[index - fromSchools.length - fromReceipts.length];
+        final localPath = localSchool.sampleProofPath?.toString() ?? '';
+        final county = localSchool.county;
+        return _buildPhotoCard(
+          url: '',
+          localPath: localPath,
+          title: localSchool.name,
+          subtitle: county.isEmpty
+              ? 'Onboarding proof (local unsynced)'
+              : '$county • Onboarding proof (local unsynced)',
+          onDelete: () => _deleteLocalSchoolProof(localSchool.id),
+        );
+      },
+    );
+  }
+
+  Widget _buildStampedReceiptGrid() {
+    if (_receiptRows.isEmpty) {
+      return const Center(child: Text('No stamped sample photos yet.'));
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.88,
+      ),
+      itemCount: _receiptRows.length,
+      itemBuilder: (context, index) {
+        final row = _receiptRows[index];
+        final url = row['stamped_receipt_url']?.toString() ?? '';
+        final schoolName = row['schools']?['name']?.toString() ?? 'School';
+        final sampleName = row['sample_name']?.toString() ?? 'Sample';
+        return _buildPhotoCard(
+          url: url,
+          title: schoolName,
+          subtitle: sampleName,
+          onDelete: () => _deleteReceiptProof(row),
+        );
+      },
+    );
+  }
+
+  Widget _buildPhotoCard({
+    required String url,
+    String? localPath,
+    required String title,
+    required String subtitle,
+    required VoidCallback onDelete,
+  }) {
+    return InkWell(
+      onTap: () {
+        showDialog<void>(
+          context: context,
+          builder: (_) => Dialog(
+            child: InteractiveViewer(
+              child: Image.network(url, fit: BoxFit.contain),
+            ),
+          ),
+        );
+      },
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: (localPath != null && localPath.trim().isNotEmpty)
+                  ? Image.file(
+                      File(localPath),
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.grey.shade200,
+                        alignment: Alignment.center,
+                        child: const Text('Could not load'),
+                      ),
+                    )
+                  : Image.network(
+                      url,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.grey.shade200,
+                        alignment: Alignment.center,
+                        child: const Text('Could not load'),
+                      ),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$title\n$subtitle',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Delete photo',
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteLocalSchoolProof(String schoolId) async {
+    final approved = await _confirmDelete();
+    if (!approved) return;
+    try {
+      final schools = await _dbService.getAllSchoolProfiles();
+      final idx = schools.indexWhere((s) => s.id == schoolId);
+      if (idx == -1) return;
+      final school = schools[idx];
+      final updated = SchoolModel(
+        id: school.id,
+        name: school.name,
+        phone: school.phone,
+        county: school.county,
+        focusAreas: school.focusAreas,
+        bookCategory: school.bookCategory,
+        latitude: school.latitude,
+        longitude: school.longitude,
+        photoUrl: school.photoUrl,
+        photoPath: school.photoPath,
+        capturedBy: school.capturedBy,
+        capturedAt: school.capturedAt,
+        captureStatus: school.captureStatus,
+        contactName: school.contactName,
+        contactPhone: school.contactPhone,
+        contactTitle: school.contactTitle,
+        feedback: school.feedback,
+        notes: school.notes,
+        samplesLeft: school.samplesLeft,
+        sampleBook: school.sampleBook,
+        sampleProofUrl: null,
+        sampleProofPath: null,
+        schoolOwnership: school.schoolOwnership,
+        schoolOwnershipOther: school.schoolOwnershipOther,
+        schoolPopulation: school.schoolPopulation,
+        schoolLifecycleStatus: school.schoolLifecycleStatus,
+        engagementType: school.engagementType,
+        isSynced: false,
+        createdAt: school.createdAt,
+        updatedAt: DateTime.now(),
+      );
+      await _dbService.saveSchoolProfile(updated);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete local photo: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteSchoolProof(Map<String, dynamic> row) async {
+    final schoolId = row['id']?.toString();
+    if (schoolId == null || schoolId.isEmpty) return;
+    final approved = await _confirmDelete();
+    if (!approved) return;
+
+    try {
+      await _supabase
+          .from('schools')
+          .update({'sample_proof_url': null, 'sample_proof_path': null})
+          .eq('id', schoolId);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete photo: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteReceiptProof(Map<String, dynamic> row) async {
+    final receiptId = row['id']?.toString();
+    if (receiptId == null || receiptId.isEmpty) return;
+    final approved = await _confirmDelete();
+    if (!approved) return;
+
+    try {
+      await _supabase
+          .from('school_sample_distributions')
+          .update({'stamped_receipt_url': null, 'stamped_receipt_path': null})
+          .eq('id', receiptId);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete photo: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<bool> _confirmDelete() async {
+    final answer = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Photo'),
+        content: const Text('Are you sure you want to delete this photo?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return answer == true;
   }
 }

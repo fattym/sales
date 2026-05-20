@@ -199,6 +199,10 @@ create table if not exists public.schools (
   external_vicinity text,
   "focusAreas" jsonb not null default '[]'::jsonb,
   book_category text,
+  dealer_type text,
+  shop_category text,
+  selected_product text,
+  partner_subtype text,
   latitude double precision,
   longitude double precision,
   photo_url text,
@@ -218,6 +222,8 @@ create table if not exists public.schools (
   school_population integer,
   school_lifecycle_status text,
   engagement_type text,
+  sample_proof_url text,
+  sample_proof_path text,
   "isSynced" boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -240,6 +246,18 @@ begin
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'book_category') then
     alter table public.schools add column book_category text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'dealer_type') then
+    alter table public.schools add column dealer_type text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'shop_category') then
+    alter table public.schools add column shop_category text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'selected_product') then
+    alter table public.schools add column selected_product text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'partner_subtype') then
+    alter table public.schools add column partner_subtype text;
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'photo_url') then
     alter table public.schools add column photo_url text;
@@ -291,6 +309,12 @@ begin
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'engagement_type') then
     alter table public.schools add column engagement_type text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'sample_proof_url') then
+    alter table public.schools add column sample_proof_url text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'sample_proof_path') then
+    alter table public.schools add column sample_proof_path text;
   end if;
 end $$;
 

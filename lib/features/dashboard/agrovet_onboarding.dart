@@ -49,6 +49,8 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
   List<String> _sampleBookOptions = <String>[];
   XFile? _capturedPhoto;
   Uint8List? _capturedPhotoBytes;
+  XFile? _sampleProofPhoto;
+  Uint8List? _sampleProofPhotoBytes;
   Position? _currentPosition;
   String? _captureStatus;
   bool isOffline = true;
@@ -140,6 +142,22 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
 
     setState(() => _isSubmitting = true);
     final uploadedPhoto = await _uploadSchoolPhoto();
+    final uploadedSampleProof = await _uploadSampleProofPhoto();
+    if (_samplesLeft == 'Yes' &&
+        (uploadedSampleProof['proofUrl'] ?? '').trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not upload stamped sample proof photo. Please retake and try again.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _isSubmitting = false);
+      }
+      return;
+    }
 
     final school = SchoolModel(
       name: schoolName,
@@ -147,6 +165,10 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       county: county,
       focusAreas: focusAreas,
       bookCategory: _selectedBookProgram,
+      dealerType: _dealerType,
+      shopCategory: _shopCategory,
+      selectedProduct: _selectedProduct,
+      partnerSubtype: _partnerSubtype,
       latitude: _currentPosition?.latitude,
       longitude: _currentPosition?.longitude,
       photoUrl: uploadedPhoto['photoUrl'],
@@ -171,6 +193,8 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
               : _notesController.text.trim(),
       samplesLeft: _samplesLeft,
       sampleBook: _selectedSampleBook,
+      sampleProofUrl: uploadedSampleProof['proofUrl'],
+      sampleProofPath: uploadedSampleProof['proofPath'],
       schoolOwnership: _schoolOwnership,
       schoolOwnershipOther:
           _schoolOwnership == 'Others'
@@ -195,6 +219,38 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
 
     try {
       await _dbService.saveSchoolProfile(school);
+      if (_samplesLeft == 'Yes' &&
+          (uploadedSampleProof['proofUrl'] ?? '').trim().isNotEmpty) {
+        try {
+          await Supabase.instance.client.from('schools').upsert({
+            ...school.toMap(),
+            'captured_by': null,
+          });
+          await _dbService.recordSampleDistribution(
+            schoolId: school.id,
+            sampleName: _selectedSampleBook?.trim().isNotEmpty == true
+                ? _selectedSampleBook!.trim()
+                : 'Sample Book',
+            sampleCategory: 'Onboarding',
+            quantity: 1,
+            notes: 'Captured during onboarding',
+            stampedReceiptUrl: uploadedSampleProof['proofUrl'],
+            stampedReceiptPath: uploadedSampleProof['proofPath'],
+          );
+        } catch (e) {
+          debugPrint('Could not create onboarding sample receipt row: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Saved school, but could not save stamped receipt: $e',
+                ),
+                backgroundColor: Colors.orange.shade700,
+              ),
+            );
+          }
+        }
+      }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -586,6 +642,8 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
               _samplesLeft = val;
               if (val != "Yes") {
                 _selectedSampleBook = null;
+                _sampleProofPhoto = null;
+                _sampleProofPhotoBytes = null;
               }
             }),
             value: _samplesLeft,
@@ -598,6 +656,8 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
               (val) => setState(() => _selectedSampleBook = val),
               value: _selectedSampleBook,
             ),
+            const SizedBox(height: 16),
+            _buildSampleProofPicker(),
           ],
         ],
       ),
@@ -987,6 +1047,7 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       'contactName': _contactNameController.text,
       'samplesLeft': _samplesLeft,
       'selectedSampleBook': _selectedSampleBook,
+      'sampleProofCaptured': _sampleProofPhoto != null,
       'schoolOwnership': _schoolOwnership,
       'schoolOwnershipOther': _schoolOwnershipOtherController.text,
       'schoolPopulation': _schoolPopulationController.text,
@@ -1034,6 +1095,115 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       debugPrint('School photo upload failed: $e');
       return {'photoUrl': null, 'photoPath': _capturedPhoto!.path};
     }
+  }
+
+  Future<void> _captureSampleProofPhoto() async {
+    try {
+      final photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+      );
+      if (!mounted || photo == null) return;
+      final bytes = await photo.readAsBytes();
+      setState(() {
+        _sampleProofPhoto = photo;
+        _sampleProofPhotoBytes = bytes;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open camera for sample proof.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<Map<String, String?>> _uploadSampleProofPhoto() async {
+    if (_sampleProofPhoto == null) {
+      return {'proofUrl': null, 'proofPath': null};
+    }
+
+    final supabase = Supabase.instance.client;
+    final fileExt = _sampleProofPhoto!.path.split('.').last.toLowerCase();
+    final safeSchool =
+        _shopNameController.text.trim().isEmpty
+            ? 'school'
+            : _shopNameController.text.trim().replaceAll(
+              RegExp(r'[^a-zA-Z0-9]+'),
+              '_',
+            );
+    final fileName =
+        'sample_proofs/${safeSchool}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+    final bytes = await _sampleProofPhoto!.readAsBytes();
+
+    try {
+      await supabase.storage
+          .from('schools')
+          .uploadBinary(
+            fileName,
+            bytes,
+            fileOptions: const FileOptions(upsert: true),
+          );
+      return {
+        'proofUrl': supabase.storage.from('schools').getPublicUrl(fileName),
+        'proofPath': fileName,
+      };
+    } catch (e) {
+      debugPrint('Sample proof upload failed: $e');
+      return {'proofUrl': null, 'proofPath': _sampleProofPhoto!.path};
+    }
+  }
+
+  Widget _buildSampleProofPicker() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Capture Stamped Document *',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          if (_sampleProofPhotoBytes == null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'No stamped document photo captured.',
+                textAlign: TextAlign.center,
+              ),
+            )
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                _sampleProofPhotoBytes!,
+                width: double.infinity,
+                height: 160,
+                fit: BoxFit.cover,
+              ),
+            ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _captureSampleProofPhoto,
+            icon: const Icon(Icons.camera_alt_outlined),
+            label: Text(_sampleProofPhoto == null ? 'Capture Photo' : 'Retake'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadSampleBooks() async {
@@ -1138,6 +1308,15 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       if (phone.isEmpty) return 'Phone number is required.';
       final digits = phone.replaceAll(RegExp(r'[^0-9+]'), '');
       if (digits.length < 10) return 'Enter a valid phone number.';
+      if (_samplesLeft == null) {
+        return 'Please indicate whether samples were left.';
+      }
+      if (_samplesLeft == "Yes" && _selectedSampleBook == null) {
+        return 'Please select the sample book left.';
+      }
+      if (_samplesLeft == "Yes" && _sampleProofPhoto == null) {
+        return 'Please capture the stamped document photo.';
+      }
     }
 
     return null;

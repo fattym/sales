@@ -21,6 +21,10 @@ ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS school_ownership_other TEXT;
 ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS school_population INTEGER;
 ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS school_lifecycle_status TEXT;
 ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS engagement_type TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS dealer_type TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS shop_category TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS selected_product TEXT;
+ALTER TABLE public.schools ADD COLUMN IF NOT EXISTS partner_subtype TEXT;
 ALTER TABLE public.school_sample_distributions ADD COLUMN IF NOT EXISTS stamped_receipt_url TEXT;
 ALTER TABLE public.school_sample_distributions ADD COLUMN IF NOT EXISTS stamped_receipt_path TEXT;
 
@@ -348,3 +352,77 @@ DO $$ BEGIN
     USING (true)
     WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Stamped sample proof fields on schools
+ALTER TABLE public.schools
+ADD COLUMN IF NOT EXISTS sample_proof_url TEXT;
+
+ALTER TABLE public.schools
+ADD COLUMN IF NOT EXISTS sample_proof_path TEXT;
+
+-- ROI support for sample distribution (Role 5 and admin analytics)
+CREATE INDEX IF NOT EXISTS idx_sample_distributions_agent_school
+ON public.school_sample_distributions (agent_id, school_id, distributed_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_orders_agent_status
+ON public.orders (agent_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_school_sales_agent_stage
+ON public.school_sales (agent_id, sale_status, created_at DESC);
+
+CREATE OR REPLACE VIEW public.v_agent_sample_roi AS
+WITH sample_stats AS (
+  SELECT
+    d.agent_id,
+    COALESCE(SUM(d.quantity), 0)::int AS samples_given,
+    COUNT(DISTINCT d.school_id)::int AS schools_reached
+  FROM public.school_sample_distributions d
+  WHERE d.agent_id IS NOT NULL
+  GROUP BY d.agent_id
+),
+revenue_stats AS (
+  SELECT
+    o.agent_id,
+    COALESCE(
+      SUM(
+        CASE
+          WHEN LOWER(COALESCE(o.status, '')) IN ('approved', 'paid')
+          THEN COALESCE(o.checkout_amount, 0)
+          ELSE 0
+        END
+      ),
+      0
+    )::numeric(12,2) AS revenue_earned
+  FROM public.orders o
+  WHERE o.agent_id IS NOT NULL
+  GROUP BY o.agent_id
+),
+won_stats AS (
+  SELECT
+    s.agent_id,
+    COALESCE(
+      SUM(
+        CASE
+          WHEN LOWER(COALESCE(s.sale_status, '')) = 'won'
+          THEN COALESCE(s.expected_value, 0)
+          ELSE 0
+        END
+      ),
+      0
+    )::numeric(12,2) AS won_value
+  FROM public.school_sales s
+  WHERE s.agent_id IS NOT NULL
+  GROUP BY s.agent_id
+)
+SELECT
+  u.id AS agent_id,
+  COALESCE(u.full_name, u.email, 'Unknown User') AS agent_name,
+  COALESCE(ss.samples_given, 0) AS samples_given,
+  COALESCE(ss.schools_reached, 0) AS schools_reached,
+  COALESCE(rs.revenue_earned, 0)::numeric(12,2) AS revenue_earned,
+  COALESCE(ws.won_value, 0)::numeric(12,2) AS won_value
+FROM public.users u
+LEFT JOIN sample_stats ss ON ss.agent_id = u.id
+LEFT JOIN revenue_stats rs ON rs.agent_id = u.id
+LEFT JOIN won_stats ws ON ws.agent_id = u.id
+WHERE u.role IN (4, 5);
