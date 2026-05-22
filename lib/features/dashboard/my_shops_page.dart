@@ -680,15 +680,43 @@ class _MyShopsPageState extends State<MyShopsPage> {
 
   Future<void> _searchSchoolsAroundMeFromGoogle() async {
     if (!GoogleMapsConfig.isConfigured) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Google Maps API key missing. Add --dart-define=GOOGLE_MAPS_API_KEY=your_key',
-          ),
-          backgroundColor: Colors.red,
-        ),
+      final originLat = _currentPosition?.latitude;
+      final originLng = _currentPosition?.longitude;
+      if (originLat == null || originLng == null) {
+        await _loadCurrentLocation();
+      }
+
+      final lat = _currentPosition?.latitude;
+      final lng = _currentPosition?.longitude;
+      final fallbackUri =
+          (lat != null && lng != null)
+              ? Uri.parse('https://www.google.com/maps/search/schools/@$lat,$lng,13z')
+              : Uri.parse('https://www.google.com/maps/search/schools+near+me');
+
+      final opened = await launchUrl(
+        fallbackUri,
+        mode: LaunchMode.externalApplication,
       );
+
+      if (!mounted) return;
+      if (opened) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Opened Google Maps nearby schools search (API key not configured yet).',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Google Maps API key missing. Add --dart-define=GOOGLE_MAPS_API_KEY=your_key',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 

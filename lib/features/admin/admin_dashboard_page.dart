@@ -221,38 +221,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
+    final isNarrow = MediaQuery.of(context).size.width < 900;
 
     return Scaffold(
-      appBar: AppBar(
-        leading:
-            isDesktop
-                ? IconButton(
-                  icon: Icon(_isSidebarExpanded ? Icons.menu_open : Icons.menu),
-                  tooltip:
-                      _isSidebarExpanded
-                          ? 'Collapse sidebar'
-                          : 'Expand sidebar',
-                  onPressed: () {
-                    setState(() {
-                      _isSidebarExpanded = !_isSidebarExpanded;
-                    });
-                  },
-                )
-                : null,
-        title: const Text("Admin Dashboard"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.playlist_add),
-            onPressed: _createTask,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshDashboard,
-          ),
-          if (!isDesktop)
-            IconButton(icon: const Icon(Icons.logout), onPressed: _signOut),
-        ],
-      ),
+      appBar:
+          isDesktop
+              ? null
+              : AppBar(
+                automaticallyImplyLeading: true,
+                backgroundColor: const Color(0xFF6D273F),
+                toolbarHeight: 44,
+                title: const SizedBox.shrink(),
+                centerTitle: false,
+              ),
       drawer: isDesktop ? null : Drawer(child: _buildSidebar(context)),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,15 +267,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 List<TaskModel> filteredTasks = data.tasks;
 
                 if (_selectedUserIdForTasks != null) {
-                  final selectedUser = data.users.firstWhere(
-                    (u) => u.id == _selectedUserIdForTasks,
-                    orElse: () => data.users.first,
-                  );
-                  filteredTasks =
-                      filteredTasks.where((t) {
-                        return t.targetRole == 0 ||
-                            t.targetRole == selectedUser.role;
-                      }).toList();
+                  if (data.users.isNotEmpty) {
+                    final selectedUser = data.users.firstWhere(
+                      (u) => u.id == _selectedUserIdForTasks,
+                      orElse: () => data.users.first,
+                    );
+                    filteredTasks =
+                        filteredTasks.where((t) {
+                          return t.targetRole == 0 ||
+                              t.targetRole == selectedUser.role;
+                        }).toList();
+                  } else {
+                    filteredTasks = <TaskModel>[];
+                  }
                 }
 
                 if (_taskTimeFilter != 'All') {
@@ -378,7 +363,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 return RefreshIndicator(
                   onRefresh: () async => _refreshDashboard(),
                   child: ListView(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(isNarrow ? 12 : 20),
                     children: [
                       _buildHeroCard(),
                       const SizedBox(height: 20),
@@ -396,116 +381,218 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                             "Filter and review tasks assigned to specific people or roles.",
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String?>(
-                              initialValue: _selectedUserIdForTasks,
-                              decoration: InputDecoration(
-                                labelText: 'Filter by Person',
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
+                      if (isNarrow) ...[
+                        DropdownButtonFormField<String?>(
+                          initialValue: _selectedUserIdForTasks,
+                          decoration: InputDecoration(
+                            labelText: 'Filter by Person',
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('All Users'),
+                            ),
+                            ...data.users.map(
+                              (u) => DropdownMenuItem(
+                                value: u.id,
+                                child: Text(
+                                  u.fullName ?? u.email,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              items: [
-                                const DropdownMenuItem(
-                                  value: null,
-                                  child: Text('All Users'),
-                                ),
-                                ...data.users.map(
-                                  (u) => DropdownMenuItem(
-                                    value: u.id,
-                                    child: Text(
-                                      u.fullName ?? u.email,
-                                      overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          onChanged:
+                              (val) => setState(
+                                () => _selectedUserIdForTasks = val,
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: _taskTimeFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Timeframe',
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                          ),
+                          items:
+                              ['All', 'Daily', 'Weekly', 'Monthly']
+                                  .map(
+                                    (f) => DropdownMenuItem(
+                                      value: f,
+                                      child: Text(f),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged:
+                              (val) =>
+                                  setState(() => _taskTimeFilter = val!),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: _taskStatusFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Status',
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                          ),
+                          items:
+                              ['All', 'Open', 'In Progress', 'Closed']
+                                  .map(
+                                    (s) => DropdownMenuItem(
+                                      value: s,
+                                      child: Text(s),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged:
+                              (val) => setState(
+                                () => _taskStatusFilter = val ?? 'All',
+                              ),
+                        ),
+                      ] else
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String?>(
+                                initialValue: _selectedUserIdForTasks,
+                                decoration: InputDecoration(
+                                  labelText: 'Filter by Person',
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
                                     ),
                                   ),
                                 ),
-                              ],
-                              onChanged:
-                                  (val) => setState(
-                                    () => _selectedUserIdForTasks = val,
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: null,
+                                    child: Text('All Users'),
                                   ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _taskTimeFilter,
-                              decoration: InputDecoration(
-                                labelText: 'Timeframe',
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
+                                  ...data.users.map(
+                                    (u) => DropdownMenuItem(
+                                      value: u.id,
+                                      child: Text(
+                                        u.fullName ?? u.email,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
+                                onChanged:
+                                    (val) => setState(
+                                      () => _selectedUserIdForTasks = val,
+                                    ),
                               ),
-                              items:
-                                  ['All', 'Daily', 'Weekly', 'Monthly']
-                                      .map(
-                                        (f) => DropdownMenuItem(
-                                          value: f,
-                                          child: Text(f),
-                                        ),
-                                      )
-                                      .toList(),
-                              onChanged:
-                                  (val) =>
-                                      setState(() => _taskTimeFilter = val!),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _taskStatusFilter,
-                              decoration: InputDecoration(
-                                labelText: 'Status',
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _taskTimeFilter,
+                                decoration: InputDecoration(
+                                  labelText: 'Timeframe',
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
                                   ),
                                 ),
+                                items:
+                                    ['All', 'Daily', 'Weekly', 'Monthly']
+                                        .map(
+                                          (f) => DropdownMenuItem(
+                                            value: f,
+                                            child: Text(f),
+                                          ),
+                                        )
+                                        .toList(),
+                                onChanged:
+                                    (val) =>
+                                        setState(() => _taskTimeFilter = val!),
                               ),
-                              items:
-                                  ['All', 'Open', 'In Progress', 'Closed']
-                                      .map(
-                                        (s) => DropdownMenuItem(
-                                          value: s,
-                                          child: Text(s),
-                                        ),
-                                      )
-                                      .toList(),
-                              onChanged:
-                                  (val) => setState(
-                                    () => _taskStatusFilter = val ?? 'All',
-                                  ),
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _taskStatusFilter,
+                                decoration: InputDecoration(
+                                  labelText: 'Status',
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                ),
+                                items:
+                                    ['All', 'Open', 'In Progress', 'Closed']
+                                        .map(
+                                          (s) => DropdownMenuItem(
+                                            value: s,
+                                            child: Text(s),
+                                          ),
+                                        )
+                                        .toList(),
+                                onChanged:
+                                    (val) => setState(
+                                      () => _taskStatusFilter = val ?? 'All',
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
                       const SizedBox(height: 10),
                       Wrap(
                         spacing: 10,
@@ -574,39 +661,26 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
   Widget _buildHeroCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.longhornMaroon,
-            AppColors.charcoalGrey.withValues(alpha: 0.95),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: const Color(0xFF6D273F),
         borderRadius: BorderRadius.circular(20),
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.admin_panel_settings, color: Colors.white, size: 40),
-          SizedBox(height: 12),
+          Icon(Icons.admin_panel_settings, color: Colors.white, size: 30),
+          SizedBox(height: 8),
           Text(
             "Admin Controls",
             style: TextStyle(
               color: Colors.white,
-              fontSize: 24,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 8),
           Text(
-            "Review users and view school GPS dots on the map.",
-            style: TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          SizedBox(height: 8),
-          Text(
-            "Use the + button to add role-based tasks.",
+            "Manage tasks, users, and map filters.",
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
         ],
@@ -646,11 +720,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildSidebar(BuildContext context, {bool isCollapsed = false}) {
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeInOut,
       width: isCollapsed ? 88 : 260,
-      color: AppColors.primaryDark,
+      color: const Color(0xFF6D273F),
       child: Column(
         children: [
           AnimatedContainer(
@@ -685,6 +760,32 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       'Publisher Controls',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _createTask,
+                          icon: const Icon(Icons.playlist_add, size: 16),
+                          label: const Text('Add Task'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white54),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _refreshDashboard,
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Refresh'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white54),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ],
               ),
@@ -695,7 +796,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               padding: EdgeInsets.zero,
               children: [
                 _buildSidebarItem(context, Icons.dashboard, 'Dashboard', () {
-                  if (MediaQuery.of(context).size.width < 800) {
+                  if (!isDesktop) {
                     Navigator.pop(context);
                   }
                 }, isCollapsed: isCollapsed),
@@ -916,7 +1017,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 context,
                 Icons.logout,
                 'Sign Out',
-                _signOut,
+                () {
+                  if (!isDesktop) {
+                    Navigator.pop(context);
+                  }
+                  _signOut();
+                },
                 isCollapsed: isCollapsed,
               ),
             ),
@@ -996,7 +1102,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       for (final r in userRoutePlans) {
         final idsRaw = r['school_ids'];
         if (idsRaw != null) {
-          routeSchoolIds.addAll(List<String>.from(idsRaw as List));
+          if (idsRaw is List) {
+            routeSchoolIds.addAll(idsRaw.map((e) => e.toString()));
+          }
         }
       }
       mapSchools =
@@ -1011,154 +1119,226 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     final polylines = _buildRoutePolylines(userRoutePlans, schools);
     final polygons = _buildGeofencePolygons(userGeofences);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isSmall = constraints.maxWidth < 900;
+        final mapHeight = isSmall ? 340.0 : 460.0;
+        final dateLabel =
+            _mapDateRange == null
+                ? 'Date Filter'
+                : '${_mapDateRange!.start.year}-${_mapDateRange!.start.month.toString().padLeft(2, '0')}-${_mapDateRange!.start.day.toString().padLeft(2, '0')} -> ${_mapDateRange!.end.year}-${_mapDateRange!.end.month.toString().padLeft(2, '0')}-${_mapDateRange!.end.day.toString().padLeft(2, '0')}';
+
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: _buildSectionHeader(
+            if (isSmall) ...[
+              _buildSectionHeader(
                 "Field Operations Map",
                 subtitle:
                     "View school locations, route plans, and assigned geofences.",
               ),
-            ),
-            OutlinedButton.icon(
-              onPressed:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AdminGeofenceMapScreen(),
-                    ),
-                  ),
-              icon: const Icon(Icons.add_location_alt, size: 18),
-              label: const Text('Manage Geofences'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.longhornMaroon,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(
-              width: 360,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: _selectedUserIdForMap,
-                    hint: const Text('All Users (No Route Filter)'),
-                    isExpanded: true,
-                    icon: const Icon(Icons.filter_list),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('All Users (No Route Filter)'),
-                      ),
-                      ...{for (var u in users) u.id: u}.values.map(
-                        (u) => DropdownMenuItem(
-                          value: u.id,
-                          child: Text(
-                            '${u.fullName ?? u.email} (Role ${u.role})',
-                          ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AdminGeofenceMapScreen(),
                         ),
                       ),
-                    ],
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedUserIdForMap = val;
-                      });
-                    },
+                  icon: const Icon(Icons.add_location_alt, size: 18),
+                  label: const Text('Manage Geofences'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.longhornMaroon,
                   ),
                 ),
               ),
-            ),
-            OutlinedButton.icon(
-              onPressed: _pickMapDateRange,
-              icon: const Icon(Icons.calendar_month_outlined),
-              label: Text(
-                _mapDateRange == null
-                    ? 'Date Filter'
-                    : '${_mapDateRange!.start.year}-${_mapDateRange!.start.month.toString().padLeft(2, '0')}-${_mapDateRange!.start.day.toString().padLeft(2, '0')} -> ${_mapDateRange!.end.year}-${_mapDateRange!.end.month.toString().padLeft(2, '0')}-${_mapDateRange!.end.day.toString().padLeft(2, '0')}',
-              ),
-            ),
-            if (_mapDateRange != null)
-              IconButton(
-                tooltip: 'Clear date filter',
-                onPressed: _clearMapDateRange,
-                icon: const Icon(Icons.clear),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        Container(
-          height: 460,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child:
-              mapSchools.isEmpty
-                  ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        _selectedUserIdForMap == null
-                            ? (_mapDateRange == null
-                                ? 'No school GPS coordinates found yet.\nSave a school profile to see dots here.'
-                                : 'No schools found for the selected date range.')
-                            : 'No mapped schools or areas found for this filter.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey[700]),
-                      ),
+            ] else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildSectionHeader(
+                      "Field Operations Map",
+                      subtitle:
+                          "View school locations, route plans, and assigned geofences.",
                     ),
-                  )
-                  : FlutterMap(
-                    options: MapOptions(
-                      initialCenter: _mapCenter(mapSchools),
-                      initialZoom: mapSchools.length > 1 ? 6.3 : 11.5,
-                      minZoom: 2,
-                      maxZoom: 18,
-                      backgroundColor: const Color(0xFFE9EFE8),
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'dehus.longhorn.publishers',
-                      ),
-                      PolygonLayer(polygons: polygons),
-                      PolylineLayer(polylines: polylines),
-                      MarkerLayer(markers: _schoolMarkers(context, mapSchools)),
-                    ],
                   ),
-        ),
-      ],
+                  OutlinedButton.icon(
+                    onPressed:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AdminGeofenceMapScreen(),
+                          ),
+                        ),
+                    icon: const Icon(Icons.add_location_alt, size: 18),
+                    label: const Text('Manage Geofences'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.longhornMaroon,
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 12),
+
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: isSmall ? constraints.maxWidth : 360,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String?>(
+                        value: _selectedUserIdForMap,
+                        hint: const Text('All Users (No Route Filter)'),
+                        isExpanded: true,
+                        icon: const Icon(Icons.filter_list),
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: Text('All Users (No Route Filter)'),
+                          ),
+                          ...{for (var u in users) u.id: u}.values.map(
+                            (u) => DropdownMenuItem(
+                              value: u.id,
+                              child: Text(
+                                '${u.fullName ?? u.email} (Role ${u.role})',
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedUserIdForMap = val;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _pickMapDateRange,
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: Text(dateLabel),
+                ),
+                if (_mapDateRange != null)
+                  IconButton(
+                    tooltip: 'Clear date filter',
+                    onPressed: _clearMapDateRange,
+                    icon: const Icon(Icons.clear),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            Container(
+              height: mapHeight,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child:
+                        mapSchools.isEmpty
+                            ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text(
+                                  _selectedUserIdForMap == null
+                                      ? (_mapDateRange == null
+                                          ? 'No school GPS coordinates found yet.\nSave a school profile to see dots here.'
+                                          : 'No schools found for the selected date range.')
+                                      : 'No mapped schools or areas found for this filter.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.grey[700]),
+                                ),
+                              ),
+                            )
+                            : FlutterMap(
+                              options: MapOptions(
+                                initialCenter: _mapCenter(mapSchools),
+                                initialZoom: mapSchools.length > 1 ? 6.3 : 11.5,
+                                minZoom: 2,
+                                maxZoom: 18,
+                                backgroundColor: const Color(0xFFE9EFE8),
+                                interactionOptions: const InteractionOptions(
+                                  flags:
+                                      InteractiveFlag.all &
+                                      ~InteractiveFlag.rotate,
+                                ),
+                              ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate:
+                                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                  userAgentPackageName: 'dehus.longhorn.publishers',
+                                  maxNativeZoom: 19,
+                                  panBuffer: 2,
+                                ),
+                                PolygonLayer(polygons: polygons),
+                                PolylineLayer(polylines: polylines),
+                                MarkerLayer(
+                                  markers: _schoolMarkers(context, mapSchools),
+                                ),
+                              ],
+                            ),
+                  ),
+                  if (mapSchools.isNotEmpty)
+                    Positioned(
+                      left: 12,
+                      bottom: 12,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => _FullScreenMapPage(
+                                schools: mapSchools,
+                                polygons: polygons,
+                                polylines: polylines,
+                                markers: _schoolMarkers(context, mapSchools),
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.fullscreen, size: 18),
+                        label: const Text('Full Screen'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF6D273F),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1404,6 +1584,62 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _FullScreenMapPage extends StatelessWidget {
+  const _FullScreenMapPage({
+    required this.schools,
+    required this.polygons,
+    required this.polylines,
+    required this.markers,
+  });
+
+  final List<SchoolModel> schools;
+  final List<Polygon> polygons;
+  final List<Polyline> polylines;
+  final List<Marker> markers;
+
+  LatLng _mapCenter(List<SchoolModel> schools) {
+    final latitudes = schools
+        .map((school) => school.latitude!.toDouble())
+        .toList(growable: false);
+    final longitudes = schools
+        .map((school) => school.longitude!.toDouble())
+        .toList(growable: false);
+    final avgLat = latitudes.reduce((a, b) => a + b) / latitudes.length;
+    final avgLng = longitudes.reduce((a, b) => a + b) / longitudes.length;
+    return LatLng(avgLat, avgLng);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Field Operations Map')),
+      body: FlutterMap(
+        options: MapOptions(
+          initialCenter: _mapCenter(schools),
+          initialZoom: schools.length > 1 ? 6.3 : 11.5,
+          minZoom: 2,
+          maxZoom: 18,
+          backgroundColor: const Color(0xFFE9EFE8),
+          interactionOptions: const InteractionOptions(
+            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+          ),
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'dehus.longhorn.publishers',
+            maxNativeZoom: 19,
+            panBuffer: 2,
+          ),
+          PolygonLayer(polygons: polygons),
+          PolylineLayer(polylines: polylines),
+          MarkerLayer(markers: markers),
+        ],
+      ),
     );
   }
 }

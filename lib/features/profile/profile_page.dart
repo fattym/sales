@@ -266,7 +266,7 @@ class _SalesDashboardState extends State<SalesDashboard> {
               ),
         ),
         _actionBtn(
-          "Project",
+          "Survey",
           Icons.assignment_turned_in_outlined,
           AppColors.infoBlue,
           onTap:

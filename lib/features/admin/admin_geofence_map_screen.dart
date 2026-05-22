@@ -479,6 +479,11 @@ class _AdminGeofenceMapScreenState extends State<AdminGeofenceMapScreen> {
           options: MapOptions(
             initialCenter: _initialCenter,
             initialZoom: 12.0,
+            minZoom: 2,
+            maxZoom: 19,
+            interactionOptions: const InteractionOptions(
+              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+            ),
             onMapReady: () {
               _isMapReady = true;
               _centerOnCurrentLocation();
@@ -490,6 +495,8 @@ class _AdminGeofenceMapScreenState extends State<AdminGeofenceMapScreen> {
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.longhorn.dehus',
+              maxNativeZoom: 19,
+              panBuffer: 2,
             ),
             CircleLayer(
               circles: [
@@ -561,6 +568,20 @@ class _AdminGeofenceMapScreenState extends State<AdminGeofenceMapScreen> {
               ),
             ),
           ),
+        Positioned(
+          left: 16,
+          bottom: 16,
+          child: FloatingActionButton.extended(
+            heroTag: 'geofence_fullscreen',
+            backgroundColor: const Color(0xFF6D273F),
+            onPressed: _openFullScreenMap,
+            icon: const Icon(Icons.fullscreen, color: Colors.white),
+            label: const Text(
+              'Full Screen',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ),
         Positioned(
           top: 16,
           right: 16,
@@ -761,6 +782,116 @@ class _AdminGeofenceMapScreenState extends State<AdminGeofenceMapScreen> {
                   ),
                 ],
               ),
+    );
+  }
+
+  void _openFullScreenMap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => _AdminGeofenceFullScreenMapPage(
+              initialCenter: _initialCenter,
+              existingGeofenceCircles: _buildExistingGeofenceCircles(),
+              countyLabels: _buildCountyLabels(),
+              countyBoundaryPolygon: _countyBoundaryPolygon(),
+              countyColor: _countyColor(_selectedCountyFilter),
+              selectedCountyFilter: _selectedCountyFilter,
+              selectedLocation: _selectedLocation,
+              geofenceRadiusMeters: _geofenceRadiusMeters,
+            ),
+      ),
+    );
+  }
+}
+
+class _AdminGeofenceFullScreenMapPage extends StatelessWidget {
+  const _AdminGeofenceFullScreenMapPage({
+    required this.initialCenter,
+    required this.existingGeofenceCircles,
+    required this.countyLabels,
+    required this.countyBoundaryPolygon,
+    required this.countyColor,
+    required this.selectedCountyFilter,
+    required this.selectedLocation,
+    required this.geofenceRadiusMeters,
+  });
+
+  final LatLng initialCenter;
+  final List<CircleMarker> existingGeofenceCircles;
+  final List<Marker> countyLabels;
+  final List<LatLng> countyBoundaryPolygon;
+  final Color countyColor;
+  final String? selectedCountyFilter;
+  final LatLng? selectedLocation;
+  final double geofenceRadiusMeters;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Geofence Map - Full Screen')),
+      body: FlutterMap(
+        options: MapOptions(
+          initialCenter: initialCenter,
+          initialZoom: 12.0,
+          minZoom: 2,
+          maxZoom: 18,
+          interactionOptions: const InteractionOptions(
+            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+          ),
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.longhorn.dehus',
+            maxNativeZoom: 19,
+            panBuffer: 2,
+          ),
+          CircleLayer(
+            circles: [
+              ...existingGeofenceCircles,
+              if (selectedLocation != null)
+                CircleMarker(
+                  point: selectedLocation!,
+                  radius: geofenceRadiusMeters,
+                  useRadiusInMeter: true,
+                  color: Colors.blue.withValues(alpha: 0.3),
+                  borderColor: Colors.blue,
+                  borderStrokeWidth: 2,
+                ),
+            ],
+          ),
+          if (selectedLocation != null)
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: selectedLocation!,
+                  width: 40,
+                  height: 40,
+                  child: const Icon(
+                    Icons.location_pin,
+                    color: Colors.red,
+                    size: 40,
+                  ),
+                ),
+              ],
+            ),
+          MarkerLayer(markers: countyLabels),
+          if (selectedCountyFilter != null &&
+              selectedCountyFilter!.trim().isNotEmpty &&
+              countyBoundaryPolygon.isNotEmpty)
+            PolygonLayer(
+              polygons: [
+                Polygon(
+                  points: countyBoundaryPolygon,
+                  color: countyColor.withValues(alpha: 0.12),
+                  borderColor: countyColor,
+                  borderStrokeWidth: 3,
+                ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }

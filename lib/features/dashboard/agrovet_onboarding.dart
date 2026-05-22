@@ -357,43 +357,57 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final isSmall = constraints.maxWidth < 700;
+            final isLarge = constraints.maxWidth >= 1100;
             final stepperType =
-                constraints.maxWidth < 360
+                constraints.maxWidth < 900
                     ? StepperType.vertical
                     : StepperType.horizontal;
+            final maxContentWidth = isLarge ? 1080.0 : 940.0;
 
-            return Stepper(
-              type: stepperType,
-              currentStep: _currentStep,
-              onStepContinue: () {
-                final validationError = _validateCurrentStep();
-                if (validationError != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(validationError),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-                if (_currentStep < 3) {
-                  setState(() => _currentStep += 1);
-                } else {
-                  _submitForm();
-                }
-              },
-              onStepCancel: () {
-                if (_currentStep > 0) setState(() => _currentStep -= 1);
-              },
-              controlsBuilder: (context, details) {
-                return _buildStepControls(details);
-              },
-              steps: [
-                _buildLocationStep(),
-                _buildClassificationStep(),
-                _buildIntelligenceStep(),
-                _buildVisitationStep(),
-              ],
+            return Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxContentWidth),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isSmall ? 8 : 16,
+                    vertical: isSmall ? 8 : 12,
+                  ),
+                  child: Stepper(
+                    type: stepperType,
+                    currentStep: _currentStep,
+                    onStepContinue: () {
+                      final validationError = _validateCurrentStep();
+                      if (validationError != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(validationError),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      if (_currentStep < 3) {
+                        setState(() => _currentStep += 1);
+                      } else {
+                        _submitForm();
+                      }
+                    },
+                    onStepCancel: () {
+                      if (_currentStep > 0) setState(() => _currentStep -= 1);
+                    },
+                    controlsBuilder: (context, details) {
+                      return _buildStepControls(details);
+                    },
+                    steps: [
+                      _buildLocationStep(),
+                      _buildClassificationStep(),
+                      _buildIntelligenceStep(),
+                      _buildVisitationStep(),
+                    ],
+                  ),
+                ),
+              ),
             );
           },
         ),
@@ -406,14 +420,30 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       isActive: _currentStep >= 0,
       state: _currentStep > 0 ? StepState.complete : StepState.editing,
       title: const Text("Loc"),
-      content: Column(
-        children: [
-          _buildSectionHeader("School Visuals & Location"),
-          const SizedBox(height: 20),
-          _buildMediaPicker(),
-          const SizedBox(height: 20),
-          _buildLocationDisplay(),
-        ],
+      content: LayoutBuilder(
+        builder: (context, constraints) {
+          final twoCols = constraints.maxWidth >= 900;
+          return Column(
+            children: [
+              _buildSectionHeader("School Visuals & Location"),
+              const SizedBox(height: 20),
+              if (twoCols)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildMediaPicker()),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildLocationDisplay()),
+                  ],
+                )
+              else ...[
+                _buildMediaPicker(),
+                const SizedBox(height: 20),
+                _buildLocationDisplay(),
+              ],
+            ],
+          );
+        },
       ),
     );
   }

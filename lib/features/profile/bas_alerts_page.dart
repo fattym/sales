@@ -291,30 +291,71 @@ class _BasAlertsPageState extends State<BasAlertsPage> {
             const SizedBox(height: 12),
             SizedBox(
               height: 460,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: FlutterMap(
-                  options: MapOptions(initialCenter: center, initialZoom: 11.5),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.longhorn.dehus',
-                    ),
-                    CircleLayer(circles: _buildGeofenceCircles()),
-                    if (routePoints.length > 1)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: routePoints,
-                            strokeWidth: 4,
-                            color: Colors.orange,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: FlutterMap(
+                        options: MapOptions(
+                          initialCenter: center,
+                          initialZoom: 11.5,
+                          minZoom: 2,
+                          maxZoom: 19,
+                          interactionOptions: const InteractionOptions(
+                            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                           ),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.longhorn.dehus',
+                            maxNativeZoom: 19,
+                            panBuffer: 2,
+                          ),
+                          CircleLayer(circles: _buildGeofenceCircles()),
+                          if (routePoints.length > 1)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: routePoints,
+                                  strokeWidth: 4,
+                                  color: Colors.orange,
+                                ),
+                              ],
+                            ),
+                          if (markers.isNotEmpty) MarkerLayer(markers: markers),
                         ],
                       ),
-                    if (markers.isNotEmpty) MarkerLayer(markers: markers),
-                  ],
-                ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 12,
+                    bottom: 12,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (_) => _BasAlertsFullScreenMapPage(
+                                  center: center,
+                                  geofenceCircles: _buildGeofenceCircles(),
+                                  routePoints: routePoints,
+                                  markers: markers,
+                                ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.fullscreen, size: 18),
+                      label: const Text('Full Screen'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF6D273F),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -419,4 +460,56 @@ class _AlertsData {
   final List<Map<String, dynamic>> geofences;
   final List<Map<String, dynamic>> tasks;
   final List<Map<String, dynamic>> schools;
+}
+
+class _BasAlertsFullScreenMapPage extends StatelessWidget {
+  const _BasAlertsFullScreenMapPage({
+    required this.center,
+    required this.geofenceCircles,
+    required this.routePoints,
+    required this.markers,
+  });
+
+  final LatLng center;
+  final List<CircleMarker> geofenceCircles;
+  final List<LatLng> routePoints;
+  final List<Marker> markers;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Route Map - Full Screen')),
+      body: FlutterMap(
+        options: MapOptions(
+          initialCenter: center,
+          initialZoom: 11.5,
+          minZoom: 2,
+          maxZoom: 19,
+          interactionOptions: const InteractionOptions(
+            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+          ),
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.longhorn.dehus',
+            maxNativeZoom: 19,
+            panBuffer: 2,
+          ),
+          CircleLayer(circles: geofenceCircles),
+          if (routePoints.length > 1)
+            PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: routePoints,
+                  strokeWidth: 4,
+                  color: Colors.orange,
+                ),
+              ],
+            ),
+          if (markers.isNotEmpty) MarkerLayer(markers: markers),
+        ],
+      ),
+    );
+  }
 }

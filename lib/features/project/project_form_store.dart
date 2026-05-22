@@ -143,19 +143,71 @@ class ProjectFormStore {
 
     return (data as List<dynamic>).map((row) {
       final map = Map<String, dynamic>.from(row as Map);
-      return ProjectFormResponse(
-        id: map['id']?.toString() ?? '',
-        formId: map['form_id']?.toString() ?? '',
-        formTitle: map['form_title']?.toString() ?? '',
-        respondentId: map['respondent_id']?.toString() ?? '',
-        answers: Map<String, dynamic>.from(
-          map['answers'] as Map? ?? <String, dynamic>{},
-        ),
-        submittedAt:
-            DateTime.tryParse(map['submitted_at']?.toString() ?? '') ??
-            DateTime.now(),
-      );
+      return _responseFromMap(map);
     }).toList();
+  }
+
+  static Future<List<ProjectFormResponse>> fetchResponsesPage({
+    String? formNameFilter,
+    required int page,
+    int pageSize = 50,
+  }) async {
+    final from = page * pageSize;
+    final to = from + pageSize - 1;
+    final filter = formNameFilter?.trim() ?? '';
+    final data = filter.isEmpty
+        ? await _supabase
+              .from('project_form_responses')
+              .select(
+                'id, form_id, form_title, respondent_id, answers, submitted_at',
+              )
+              .order('submitted_at', ascending: false)
+              .range(from, to)
+        : await _supabase
+              .from('project_form_responses')
+              .select(
+                'id, form_id, form_title, respondent_id, answers, submitted_at',
+              )
+              .filter('form_title', 'ilike', '%$filter%')
+              .order('submitted_at', ascending: false)
+              .range(from, to);
+
+    return (data as List<dynamic>).map((row) {
+      final map = Map<String, dynamic>.from(row as Map);
+      return _responseFromMap(map);
+    }).toList();
+  }
+
+  static Future<List<ProjectFormResponse>> fetchMyResponsesForForm(
+    String formId,
+  ) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return <ProjectFormResponse>[];
+
+    final data = await _supabase
+        .from('project_form_responses')
+        .select('id, form_id, form_title, respondent_id, answers, submitted_at')
+        .eq('form_id', formId)
+        .eq('respondent_id', userId)
+        .order('submitted_at', ascending: false);
+
+    return (data as List<dynamic>).map((row) {
+      final map = Map<String, dynamic>.from(row as Map);
+      return _responseFromMap(map);
+    }).toList();
+  }
+
+  static Future<List<ProjectFormResponse>> fetchMyResponses() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return <ProjectFormResponse>[];
+    final data = await _supabase
+        .from('project_form_responses')
+        .select('id, form_id, form_title, respondent_id, answers, submitted_at')
+        .eq('respondent_id', userId)
+        .order('submitted_at', ascending: false);
+    return (data as List<dynamic>)
+        .map((row) => _responseFromMap(Map<String, dynamic>.from(row as Map)))
+        .toList();
   }
 
   static Map<String, dynamic> _questionToMap(ProjectFormQuestion q) {
@@ -201,6 +253,21 @@ class ProjectFormStore {
       options: (map['options'] as List<dynamic>? ?? <dynamic>[])
           .map((o) => o.toString())
           .toList(),
+    );
+  }
+
+  static ProjectFormResponse _responseFromMap(Map<String, dynamic> map) {
+    return ProjectFormResponse(
+      id: map['id']?.toString() ?? '',
+      formId: map['form_id']?.toString() ?? '',
+      formTitle: map['form_title']?.toString() ?? '',
+      respondentId: map['respondent_id']?.toString() ?? '',
+      answers: Map<String, dynamic>.from(
+        map['answers'] as Map? ?? <String, dynamic>{},
+      ),
+      submittedAt:
+          DateTime.tryParse(map['submitted_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 }

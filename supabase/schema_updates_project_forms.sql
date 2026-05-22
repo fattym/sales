@@ -91,6 +91,13 @@ for select
 to authenticated
 using (public.is_manager_or_admin());
 
+drop policy if exists "respondents_can_view_their_project_form_responses" on public.project_form_responses;
+create policy "respondents_can_view_their_project_form_responses"
+on public.project_form_responses
+for select
+to authenticated
+using (respondent_id = auth.uid());
+
 -- Dummy data for testing (safe to re-run)
 -- Assumes seeded users exist:
 -- admin:   11111111-1111-1111-1111-111111111111

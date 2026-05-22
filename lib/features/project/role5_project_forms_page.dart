@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'project_form_store.dart';
+import 'role5_project_form_submit_page.dart';
 
 class Role5ProjectFormsPage extends StatefulWidget {
   const Role5ProjectFormsPage({super.key});
@@ -10,6 +11,32 @@ class Role5ProjectFormsPage extends StatefulWidget {
 }
 
 class _Role5ProjectFormsPageState extends State<Role5ProjectFormsPage> {
+  late Future<List<ProjectForm>> _formsFuture;
+  late Future<Map<String, List<ProjectFormResponse>>> _myResponsesByFormFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _formsFuture = ProjectFormStore.fetchPublishedForms();
+    _myResponsesByFormFuture = _loadMyResponsesByForm();
+  }
+
+  void _reloadData() {
+    setState(() {
+      _formsFuture = ProjectFormStore.fetchPublishedForms();
+      _myResponsesByFormFuture = _loadMyResponsesByForm();
+    });
+  }
+
+  Future<Map<String, List<ProjectFormResponse>>> _loadMyResponsesByForm() async {
+    final rows = await ProjectFormStore.fetchMyResponses();
+    final grouped = <String, List<ProjectFormResponse>>{};
+    for (final row in rows) {
+      grouped.putIfAbsent(row.formId, () => <ProjectFormResponse>[]).add(row);
+    }
+    return grouped;
+  }
+
   String _typeLabel(ProjectQuestionType type) {
     switch (type) {
       case ProjectQuestionType.shortAnswer:
@@ -77,82 +104,119 @@ class _Role5ProjectFormsPageState extends State<Role5ProjectFormsPage> {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxContentWidth),
           child: FutureBuilder<List<ProjectForm>>(
-            future: ProjectFormStore.fetchPublishedForms(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+            future: _formsFuture,
+            builder: (context, formSnapshot) {
+              if (formSnapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-              if (snapshot.hasError) {
+              if (formSnapshot.hasError) {
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text('Failed to load forms: ${snapshot.error}'),
+                    child: Text('Failed to load forms: ${formSnapshot.error}'),
                   ),
                 );
               }
-              final forms = snapshot.data ?? <ProjectForm>[];
+              final forms = formSnapshot.data ?? <ProjectForm>[];
               if (forms.isEmpty) {
                 return const Center(child: Text('No published project forms yet.'));
               }
-              return ListView.separated(
-                padding: EdgeInsets.all(isSmall ? 12 : 16),
-                itemCount: forms.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final form = forms[index];
-                  return Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(isSmall ? 12 : 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            form.title,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: isSmall ? 15 : 16,
-                            ),
-                          ),
-                          if (form.description.trim().isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(form.description),
-                          ],
-                          const SizedBox(height: 12),
-                          Text(
-                            '${form.questions.length} question(s)',
-                            style: const TextStyle(
-                              color: Colors.black54,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          for (final q in form.questions)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: Text(
-                                '• ${q.title} (${_typeLabel(q.type)}${q.required ? ', required' : ''})',
+
+              return FutureBuilder<Map<String, List<ProjectFormResponse>>>(
+                future: _myResponsesByFormFuture,
+                builder: (context, responseSnapshot) {
+                  if (responseSnapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final grouped =
+                      responseSnapshot.data ??
+                      const <String, List<ProjectFormResponse>>{};
+
+                  return ListView.separated(
+                    padding: EdgeInsets.all(isSmall ? 12 : 16),
+                    itemCount: forms.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final form = forms[index];
+                      final myRows = form.id == null
+                          ? const <ProjectFormResponse>[]
+                          : (grouped[form.id!] ?? const <ProjectFormResponse>[]);
+
+                      return Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(isSmall ? 12 : 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                form.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: isSmall ? 15 : 16,
+                                ),
                               ),
-                            ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: isSmall ? double.infinity : null,
-                            child: Align(
-                              alignment: isSmall
-                                  ? Alignment.centerLeft
-                                  : Alignment.centerRight,
-                              child: FilledButton.icon(
-                                onPressed: form.id == null
-                                    ? null
-                                    : () =>
-                                        _openSubmitResponseSheet(context, form),
-                                icon: const Icon(Icons.send_outlined),
-                                label: const Text('Submit Response'),
+                              if (form.description.trim().isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(form.description),
+                              ],
+                              const SizedBox(height: 12),
+                              Text(
+                                '${form.questions.length} question(s)',
+                                style: const TextStyle(
+                                  color: Colors.black54,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 8),
+                              for (final q in form.questions)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Text(
+                                    '• ${q.title} (${_typeLabel(q.type)}${q.required ? ', required' : ''})',
+                                  ),
+                                ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: isSmall ? double.infinity : null,
+                                child: Align(
+                                  alignment: isSmall
+                                      ? Alignment.centerLeft
+                                      : Alignment.centerRight,
+                                  child: FilledButton.icon(
+                                    onPressed: form.id == null
+                                        ? null
+                                        : () async {
+                                            final submitted = await Navigator.push<bool>(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    Role5ProjectFormSubmitPage(
+                                                      form: form,
+                                                    ),
+                                              ),
+                                            );
+                                            if (submitted == true) {
+                                              _reloadData();
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('Response submitted.'),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                    icon: const Icon(Icons.send_outlined),
+                                    label: const Text('Submit Response'),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _MySubmissionsSection(submissions: myRows),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   );
                 },
               );
@@ -163,130 +227,74 @@ class _Role5ProjectFormsPageState extends State<Role5ProjectFormsPage> {
     );
   }
 
-  Future<void> _openSubmitResponseSheet(BuildContext context, ProjectForm form) async {
-    final controllers = <int, TextEditingController>{};
-    for (int i = 0; i < form.questions.length; i++) {
-      controllers[i] = TextEditingController();
+}
+
+class _MySubmissionsSection extends StatelessWidget {
+  const _MySubmissionsSection({required this.submissions});
+
+  final List<ProjectFormResponse> submissions;
+
+  String _formatDateTime(DateTime dt) {
+    final local = dt.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    var hour = local.hour;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final amPm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12;
+    if (hour == 0) hour = 12;
+    final hh = hour.toString().padLeft(2, '0');
+    return '$y-$m-$d  $hh:$minute $amPm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (submissions.isEmpty) {
+      return const Text(
+        'My Previous Submissions: none yet.',
+        style: TextStyle(color: Colors.black54),
+      );
     }
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        bool isSubmitting = false;
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 16,
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Submit: ${form.title}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 320,
-                      child: ListView(
-                        children: List.generate(form.questions.length, (index) {
-                          final q = form.questions[index];
-                          final controller = controllers[index]!;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: TextField(
-                              controller: controller,
-                              minLines:
-                                  q.type == ProjectQuestionType.paragraph ? 2 : 1,
-                              maxLines:
-                                  q.type == ProjectQuestionType.paragraph ? 4 : 1,
-                              decoration: InputDecoration(
-                                labelText:
-                                    q.required ? '${q.title} *' : q.title,
-                                border: const OutlineInputBorder(),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                    const Text(
-                      'You can submit multiple responses for the same form.',
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: isSubmitting
-                            ? null
-                            : () async {
-                                final answers = <String, dynamic>{};
-                                for (int i = 0; i < form.questions.length; i++) {
-                                  final q = form.questions[i];
-                                  final value = controllers[i]!.text.trim();
-                                  if (q.required && value.isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Please fill required question: ${q.title}',
-                                        ),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  answers['Q${i + 1}: ${q.title}'] = value;
-                                }
-                                setSheetState(() => isSubmitting = true);
-                                try {
-                                  await ProjectFormStore.submitResponse(
-                                    formId: form.id!,
-                                    formTitle: form.title,
-                                    answers: answers,
-                                  );
-                                  if (!context.mounted) return;
-                                  Navigator.pop(ctx);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Response submitted.'),
-                                    ),
-                                  );
-                                } catch (e) {
-                                  if (!context.mounted) return;
-                                  setSheetState(() => isSubmitting = false);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Submit failed: $e. If this persists, ask admin to run latest project SQL migration.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                        child: Text(isSubmitting ? 'Submitting...' : 'Submit'),
-                      ),
-                    ),
-                  ],
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      title: Text(
+        'My Previous Submissions (${submissions.length})',
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      children: submissions.map((r) {
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Submitted: ${_formatDateTime(r.submittedAt)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
                 ),
               ),
-            );
-          },
+              const SizedBox(height: 6),
+              ...r.answers.entries.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('${e.key}: ${e.value}'),
+                ),
+              ),
+            ],
+          ),
         );
-      },
+      }).toList(),
     );
-
-    for (final c in controllers.values) {
-      c.dispose();
-    }
   }
 }
