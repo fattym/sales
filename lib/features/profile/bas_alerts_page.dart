@@ -212,17 +212,60 @@ class _BasAlertsPageState extends State<BasAlertsPage> {
               )
               : RefreshIndicator(
                 onRefresh: _loadData,
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildSummaryCard(),
-                    const SizedBox(height: 16),
-                    _buildMapCard(),
-                    const SizedBox(height: 16),
-                    _buildRoutePlanCard(),
-                    const SizedBox(height: 16),
-                    _buildGeofenceListCard(),
-                  ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 1100;
+                    final isTablet = constraints.maxWidth >= 760;
+                    final padding = isTablet ? 20.0 : 12.0;
+                    final mapHeight = isWide ? 500.0 : (isTablet ? 420.0 : 300.0);
+
+                    if (isWide) {
+                      return ListView(
+                        padding: EdgeInsets.all(padding),
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 6,
+                                child: Column(
+                                  children: [
+                                    _buildSummaryCard(),
+                                    const SizedBox(height: 16),
+                                    _buildMapCard(mapHeight),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                flex: 5,
+                                child: Column(
+                                  children: [
+                                    _buildRoutePlanCard(),
+                                    const SizedBox(height: 16),
+                                    _buildGeofenceListCard(),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    }
+
+                    return ListView(
+                      padding: EdgeInsets.all(padding),
+                      children: [
+                        _buildSummaryCard(),
+                        const SizedBox(height: 16),
+                        _buildMapCard(mapHeight),
+                        const SizedBox(height: 16),
+                        _buildRoutePlanCard(),
+                        const SizedBox(height: 16),
+                        _buildGeofenceListCard(),
+                      ],
+                    );
+                  },
                 ),
               ),
     );
@@ -259,7 +302,7 @@ class _BasAlertsPageState extends State<BasAlertsPage> {
     );
   }
 
-  Widget _buildMapCard() {
+  Widget _buildMapCard(double mapHeight) {
     final routePoints = _buildRoutePolylinePoints();
     final center = _mapCenter();
 
@@ -290,7 +333,7 @@ class _BasAlertsPageState extends State<BasAlertsPage> {
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 460,
+              height: mapHeight,
               child: Stack(
                 children: [
                   Positioned.fill(

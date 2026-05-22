@@ -1,7 +1,6 @@
 import 'create_school_screen.dart';
 import 'package:flutter/material.dart';
 import 'admin_assign_task_screen.dart';
-import 'admin_create_route_screen.dart';
 import 'analytics_page.dart';
 import 'catalog_import_page.dart';
 import 'import_schools_page.dart';
@@ -14,6 +13,7 @@ import 'admin_social_pipeline_page.dart';
 import 'sample_receipts_page.dart';
 import 'project_form_builder_page.dart';
 import 'role3_supervision_dashboard_page.dart';
+import 'role2_route_plan_page.dart';
 import '../profile/messages_page.dart';
 import '../welcome/auth/login_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -273,7 +273,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const AdminCreateRouteScreen(),
+                    builder: (context) => const Role2RoutePlanPage(),
                   ),
                 );
                 _refreshData();

@@ -205,6 +205,7 @@ create table if not exists public.schools (
   partner_subtype text,
   latitude double precision,
   longitude double precision,
+  gps_accuracy_meters double precision,
   photo_url text,
   photo_path text,
   captured_by uuid references public.users (id) on delete set null,
@@ -258,6 +259,9 @@ begin
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'partner_subtype') then
     alter table public.schools add column partner_subtype text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'gps_accuracy_meters') then
+    alter table public.schools add column gps_accuracy_meters double precision;
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'schools' and column_name = 'photo_url') then
     alter table public.schools add column photo_url text;

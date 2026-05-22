@@ -115,6 +115,59 @@ class DatabaseService {
     await syncData();
   }
 
+  Future<SchoolSaveResult> saveSchoolProfileWithStatus(SchoolModel school) async {
+    final box = await _box;
+    await box.put(school.id, school.toMap());
+
+    final connectivityResult =
+        _connectivityCheck != null
+            ? await _connectivityCheck()
+            : await Connectivity().checkConnectivity();
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      return const SchoolSaveResult(
+        syncedToDatabase: false,
+        message: 'Saved locally. No internet connection.',
+      );
+    }
+
+    try {
+      if (_upsertSchoolOverride != null) {
+        await _upsertSchoolOverride(school.toMap());
+      } else {
+        await _supabase.from('schools').upsert(school.toMap());
+      }
+      if (_syncEngagementOverride != null) {
+        await _syncEngagementOverride(school);
+      } else {
+        await _syncEngagementToPipeline(school);
+      }
+      await box.put(school.id, school.copyWithSynced(true).toMap());
+      return const SchoolSaveResult(
+        syncedToDatabase: true,
+        message: 'Saved and synced to database.',
+      );
+    } catch (e) {
+      return SchoolSaveResult(
+        syncedToDatabase: false,
+        message: 'Saved locally, but database sync failed: $e',
+      );
+    }
+  }
+
+  Future<bool> isSchoolSyncedRemotely(String schoolId) async {
+    try {
+      final row =
+          await _supabase
+              .from('schools')
+              .select('id')
+              .eq('id', schoolId)
+              .maybeSingle();
+      return row != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> updateSchoolProfile(SchoolModel school) async {
     final updatedSchool = SchoolModel(
       id: school.id,
@@ -910,4 +963,11 @@ class DatabaseService {
         return 5;
     }
   }
+}
+
+class SchoolSaveResult {
+  const SchoolSaveResult({required this.syncedToDatabase, required this.message});
+
+  final bool syncedToDatabase;
+  final String message;
 }

@@ -19,6 +19,7 @@ class SchoolOnboarding extends StatefulWidget {
 }
 
 class _SchoolOnboardingState extends State<SchoolOnboarding> {
+  static const double _gpsAccuracyThresholdMeters = 50.0;
   final DatabaseService _dbService = DatabaseService();
   int _currentStep = 0;
 
@@ -64,6 +65,11 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
     "Story Books Pack",
     "Teacher Guide Kit",
   ];
+
+  static const Map<String, List<String>> _crmWorkflowBySchoolStatus = {
+    'New': ['Lead', 'Contacted', 'Meeting Scheduled', 'Proposal Sent'],
+    'Existing': ['Follow Up', 'Negotiation', 'Won', 'Lost'],
+  };
 
   static const List<String> _counties = [
     'Nairobi',
@@ -129,6 +135,27 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       );
       return;
     }
+    if (_currentPosition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Capture GPS location before submitting onboarding.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (!_hasAccurateGps) {
+      final currentAccuracy = _currentPosition!.accuracy.toStringAsFixed(1);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'GPS accuracy is $currentAccuracy m. Improve to <= ${_gpsAccuracyThresholdMeters.toStringAsFixed(0)} m and try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     final payload = _buildSubmissionPayload();
     final focusAreas = <String>[
@@ -139,6 +166,9 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
     if (focusAreas.isEmpty) {
       focusAreas.add('General');
     }
+    final submissionAccuracy = _currentPosition!.accuracy;
+    final submissionCaptureStatus =
+        'GPS submitted (${submissionAccuracy.toStringAsFixed(1)}m accuracy)';
 
     setState(() => _isSubmitting = true);
     final uploadedPhoto = await _uploadSchoolPhoto();
@@ -171,9 +201,10 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       partnerSubtype: _partnerSubtype,
       latitude: _currentPosition?.latitude,
       longitude: _currentPosition?.longitude,
+      gpsAccuracyMeters: _currentPosition?.accuracy,
       photoUrl: uploadedPhoto['photoUrl'],
       photoPath: uploadedPhoto['photoPath'],
-      captureStatus: _captureStatus,
+      captureStatus: submissionCaptureStatus,
       contactName:
           _contactNameController.text.trim().isEmpty
               ? null
@@ -210,7 +241,9 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text("${_dealerType ?? "School"} onboarding collected"),
+        content: Text(
+          "${_dealerType ?? "School"} onboarding collected with GPS accuracy ${submissionAccuracy.toStringAsFixed(1)}m",
+        ),
         backgroundColor: AppColors.primaryGreen,
         duration: const Duration(seconds: 1),
       ),
@@ -218,8 +251,12 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
 
     debugPrint('Onboarding payload: $payload');
 
+    var syncedToDatabase = false;
+    var syncMessage = '';
     try {
-      await _dbService.saveSchoolProfile(school);
+      final saveResult = await _dbService.saveSchoolProfileWithStatus(school);
+      syncedToDatabase = saveResult.syncedToDatabase;
+      syncMessage = saveResult.message;
       if (_samplesLeft == 'Yes' &&
           (uploadedSampleProof['proofUrl'] ?? '').trim().isNotEmpty) {
         try {
@@ -261,9 +298,14 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "${_dealerType ?? "School"} onboarded successfully (stored locally)",
+            syncedToDatabase
+                ? "${_dealerType ?? "School"} onboarded and synced to database."
+                : syncMessage.isEmpty
+                    ? "${_dealerType ?? "School"} saved locally. Database sync pending."
+                    : syncMessage,
           ),
-          backgroundColor: AppColors.primaryGreen,
+          backgroundColor:
+              syncedToDatabase ? AppColors.primaryGreen : Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -319,14 +361,19 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
       );
+      final accuracy = position.accuracy;
       if (!mounted) return;
       setState(() {
         _currentPosition = position;
-        _captureStatus = "GPS updated successfully";
+        if (accuracy <= _gpsAccuracyThresholdMeters) {
+          _captureStatus =
+              "GPS updated successfully (${accuracy.toStringAsFixed(1)}m accuracy)";
+        } else {
+          _captureStatus =
+              "GPS captured but accuracy is low (${accuracy.toStringAsFixed(1)}m). Move outside and refresh.";
+        }
       });
     } catch (_) {
       if (!mounted) return;
@@ -334,6 +381,12 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
         _captureStatus = "Could not fetch the current location";
       });
     }
+  }
+
+  bool get _hasAccurateGps {
+    final position = _currentPosition;
+    if (position == null) return false;
+    return position.accuracy <= _gpsAccuracyThresholdMeters;
   }
 
   @override
@@ -387,7 +440,7 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
                         );
                         return;
                       }
-                      if (_currentStep < 3) {
+                      if (_currentStep < 4) {
                         setState(() => _currentStep += 1);
                       } else {
                         _submitForm();
@@ -404,6 +457,7 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
                       _buildClassificationStep(),
                       _buildIntelligenceStep(),
                       _buildVisitationStep(),
+                      _buildPreviewStep(),
                     ],
                   ),
                 ),
@@ -616,19 +670,19 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
             _buildDropdown(
               "School Status",
               ["Existing", "New"],
-              (val) => setState(() => _schoolLifecycleStatus = val),
+              (val) => setState(() {
+                _schoolLifecycleStatus = val;
+                final stages = _crmEngagementStages;
+                if (_engagementType != null && !stages.contains(_engagementType)) {
+                  _engagementType = null;
+                }
+              }),
               value: _schoolLifecycleStatus,
             ),
             const SizedBox(height: 16),
             _buildDropdown(
-              "Engagement Type",
-              [
-                "Cold Lead",
-                "Warm Lead",
-                "Follow-up",
-                "Existing Relationship",
-                "New Prospect",
-              ],
+              "CRM Workflow Stage",
+              _crmEngagementStages,
               (val) => setState(() => _engagementType = val),
               value: _engagementType,
             ),
@@ -682,10 +736,27 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
             const SizedBox(height: 16),
             _buildDropdown(
               _sampleBookLabel,
-              _sampleBookOptions.isNotEmpty ? _sampleBookOptions : _bookOptions,
+              _sampleBookOptions,
               (val) => setState(() => _selectedSampleBook = val),
               value: _selectedSampleBook,
             ),
+            if (_sampleBookOptions.isEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'No sample books found in catalog_items (item_type=sample).',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _loadSampleBooks,
+                    child: const Text('Reload'),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
             _buildSampleProofPicker(),
           ],
@@ -712,6 +783,67 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
             _notesLabel,
             maxLines: 3,
             controller: _notesController,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Step _buildPreviewStep() {
+    return Step(
+      isActive: _currentStep >= 4,
+      state: _currentStep == 4 ? StepState.editing : StepState.indexed,
+      title: const Text("Preview"),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader("Review Before Submit"),
+          _previewCard(
+            title: "Location & Media",
+            onEdit: () => setState(() => _currentStep = 0),
+            lines: [
+              "Photo: ${_capturedPhoto != null ? 'Captured' : 'Not captured'}",
+              "Latitude: ${_currentPosition?.latitude?.toStringAsFixed(6) ?? '-'}",
+              "Longitude: ${_currentPosition?.longitude?.toStringAsFixed(6) ?? '-'}",
+              "GPS Accuracy: ${_currentPosition?.accuracy.toStringAsFixed(1) ?? '-'} m",
+            ],
+          ),
+          const SizedBox(height: 12),
+          _previewCard(
+            title: "School Classification",
+            onEdit: () => setState(() => _currentStep = 1),
+            lines: [
+              "School Name: ${_shopNameController.text.trim()}",
+              "County: ${_selectedCounty ?? '-'}",
+              "Client Type: ${_dealerType ?? '-'}",
+              "Category: ${_shopCategory ?? _partnerSubtype ?? '-'}",
+              "Product: ${_selectedProduct ?? '-'}",
+              "Book Program: ${_selectedBookProgram ?? '-'}",
+              "School Status: ${_schoolLifecycleStatus ?? '-'}",
+              "CRM Stage: ${_engagementType ?? '-'}",
+            ],
+          ),
+          const SizedBox(height: 12),
+          _previewCard(
+            title: "Contact & Samples",
+            onEdit: () => setState(() => _currentStep = 2),
+            lines: [
+              "${_contactNameLabel}: ${_contactNameController.text.trim().isEmpty ? '-' : _contactNameController.text.trim()}",
+              "${_contactPhoneLabel}: ${_contactPhoneController.text.trim()}",
+              "${_contactTitleLabel}: ${_contactTitleController.text.trim().isEmpty ? '-' : _contactTitleController.text.trim()}",
+              "Samples Left: ${_samplesLeft ?? '-'}",
+              "Selected Sample Book: ${_selectedSampleBook ?? '-'}",
+              "Sample Proof: ${_sampleProofPhoto != null ? 'Captured' : 'Not captured'}",
+            ],
+          ),
+          const SizedBox(height: 12),
+          _previewCard(
+            title: "Feedback",
+            onEdit: () => setState(() => _currentStep = 3),
+            lines: [
+              "Feedback: ${_feedbackController.text.trim().isEmpty ? '-' : _feedbackController.text.trim()}",
+              "Notes: ${_notesController.text.trim().isEmpty ? '-' : _notesController.text.trim()}",
+            ],
           ),
         ],
       ),
@@ -1005,6 +1137,7 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
   Widget _buildLocationDisplay() {
     final latitude = _currentPosition?.latitude;
     final longitude = _currentPosition?.longitude;
+    final accuracyMeters = _currentPosition?.accuracy;
     final hasLocation = latitude != null && longitude != null;
 
     return Container(
@@ -1061,6 +1194,17 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
                   const SizedBox(height: 8),
                   Text("Latitude: ${latitude.toStringAsFixed(6)}"),
                   Text("Longitude: ${longitude.toStringAsFixed(6)}"),
+                  if (accuracyMeters != null)
+                    Text(
+                      "Accuracy: ${accuracyMeters.toStringAsFixed(1)} m",
+                      style: TextStyle(
+                        color:
+                            _hasAccurateGps
+                                ? AppColors.primaryGreen
+                                : Colors.orange.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                 ],
               ],
             ),
@@ -1241,26 +1385,74 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       final items = await _dbService.getCatalogItems(itemType: 'sample');
       if (!mounted) return;
 
-      final options =
-          items
-              .map(
-                (item) =>
-                    item.category.isNotEmpty
-                        ? '${item.name} • ${item.category}'
-                        : item.name,
-              )
-              .toList();
+      final options = items
+          .map((item) => item.name.trim())
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
 
       setState(() {
-        _sampleBookOptions = options.isNotEmpty ? options : _bookOptions;
+        _sampleBookOptions = options;
+        if (_selectedSampleBook != null &&
+            !_sampleBookOptions.contains(_selectedSampleBook)) {
+          _selectedSampleBook = null;
+        }
       });
     } catch (e) {
       debugPrint('Error loading sample books: $e');
       if (!mounted) return;
       setState(() {
-        _sampleBookOptions = _bookOptions;
+        _sampleBookOptions = <String>[];
       });
     }
+  }
+
+  List<String> get _crmEngagementStages {
+    final status = (_schoolLifecycleStatus ?? '').trim();
+    final byStatus = _crmWorkflowBySchoolStatus[status];
+    if (byStatus != null && byStatus.isNotEmpty) return byStatus;
+    final isPrimary = (_shopCategory ?? '').toLowerCase() == 'primary';
+    return isPrimary
+        ? const ['Lead', 'Contacted', 'Meeting Scheduled', 'Follow Up']
+        : const ['Lead', 'Proposal Sent', 'Negotiation', 'Won', 'Lost'];
+  }
+
+  Widget _previewCard({
+    required String title,
+    required VoidCallback onEdit,
+    required List<String> lines,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton(onPressed: onEdit, child: const Text('Edit')),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ...lines.map((line) => Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(line),
+              )),
+        ],
+      ),
+    );
   }
 
   Widget _buildStepControls(ControlsDetails details) {
@@ -1343,6 +1535,9 @@ class _SchoolOnboardingState extends State<SchoolOnboarding> {
       }
       if (_samplesLeft == "Yes" && _selectedSampleBook == null) {
         return 'Please select the sample book left.';
+      }
+      if (_samplesLeft == "Yes" && _sampleBookOptions.isEmpty) {
+        return 'No sample books found. Add sample books in catalog first.';
       }
       if (_samplesLeft == "Yes" && _sampleProofPhoto == null) {
         return 'Please capture the stamped document photo.';

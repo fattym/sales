@@ -13,6 +13,7 @@ class SchoolModel {
   final String? partnerSubtype;
   final double? latitude;
   final double? longitude;
+  final double? gpsAccuracyMeters;
   final String? photoUrl;
   final String? photoPath;
   final String? capturedBy;
@@ -49,6 +50,7 @@ class SchoolModel {
     this.partnerSubtype,
     this.latitude,
     this.longitude,
+    this.gpsAccuracyMeters,
     this.photoUrl,
     this.photoPath,
     this.capturedBy,
@@ -74,7 +76,7 @@ class SchoolModel {
   }) : id = id ?? const Uuid().v4();
 
   Map<String, dynamic> toMap() {
-    return {
+    final map = <String, dynamic>{
       'id': id,
       'name': name,
       'phone': phone,
@@ -87,6 +89,7 @@ class SchoolModel {
       'partner_subtype': partnerSubtype,
       'latitude': latitude,
       'longitude': longitude,
+      'gps_accuracy_meters': gpsAccuracyMeters,
       'photo_url': photoUrl,
       'photo_path': photoPath,
       'captured_by': capturedBy,
@@ -107,9 +110,14 @@ class SchoolModel {
       'school_lifecycle_status': schoolLifecycleStatus,
       'engagement_type': engagementType,
       'isSynced': isSynced,
-      'created_at': createdAt?.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
     };
+    if (createdAt != null) {
+      map['created_at'] = createdAt!.toIso8601String();
+    }
+    if (updatedAt != null) {
+      map['updated_at'] = updatedAt!.toIso8601String();
+    }
+    return map;
   }
 
   factory SchoolModel.fromMap(Map<dynamic, dynamic> map) {
@@ -126,6 +134,9 @@ class SchoolModel {
       partnerSubtype: map['partner_subtype'] ?? map['partnerSubtype'],
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
+      gpsAccuracyMeters: _parseDouble(
+        map['gps_accuracy_meters'] ?? map['gpsAccuracyMeters'],
+      ),
       photoUrl: map['photo_url'] ?? map['photoUrl'],
       photoPath: map['photo_path'] ?? map['photoPath'],
       capturedBy: map['captured_by'] ?? map['capturedBy'],
@@ -160,6 +171,13 @@ class SchoolModel {
     return null;
   }
 
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   SchoolModel copyWithSynced(bool value) {
     return SchoolModel(
       id: id,
@@ -174,6 +192,7 @@ class SchoolModel {
       partnerSubtype: partnerSubtype,
       latitude: latitude,
       longitude: longitude,
+      gpsAccuracyMeters: gpsAccuracyMeters,
       photoUrl: photoUrl,
       photoPath: photoPath,
       capturedBy: capturedBy,

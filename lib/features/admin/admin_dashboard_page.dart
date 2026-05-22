@@ -22,6 +22,7 @@ import 'admin_crm_page.dart';
 import 'admin_social_pipeline_page.dart';
 import 'project_form_builder_page.dart';
 import 'project_form_responses_page.dart';
+import 'role2_route_plan_page.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
@@ -983,6 +984,23 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const ProjectFormResponsesPage(),
+                      ),
+                    );
+                  },
+                  isCollapsed: isCollapsed,
+                ),
+                _buildSidebarItem(
+                  context,
+                  Icons.route_outlined,
+                  'Route Planner',
+                  () {
+                    if (MediaQuery.of(context).size.width < 800) {
+                      Navigator.pop(context);
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const Role2RoutePlanPage(),
                       ),
                     );
                   },

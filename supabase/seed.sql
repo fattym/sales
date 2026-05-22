@@ -41,6 +41,48 @@ SET name = excluded.name,
     captured_at = excluded.captured_at,
     "isSynced" = excluded."isSynced";
 
+-- 1b. Extra geocoded schools for stronger map coverage
+-- Coordinates are seeded as ready-to-pin values.
+INSERT INTO public.schools (
+  id,
+  name,
+  phone,
+  county,
+  "focusAreas",
+  book_category,
+  latitude,
+  longitude,
+  capture_status,
+  captured_by,
+  captured_at,
+  "isSynced"
+)
+VALUES
+  ('a1000000-0000-0000-0000-000000000001', 'Westlands Academy', '0701000001', 'Nairobi', '["Mathematics","Languages"]'::jsonb, 'Book List', -1.2676, 36.8108, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000002', 'Thika Road School', '0701000002', 'Kiambu', '["Science","ICT"]'::jsonb, 'Book Fund', -1.2037, 36.8931, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000003', 'Machakos Township School', '0701000003', 'Machakos', '["Business","Mathematics"]'::jsonb, 'Book List', -1.5177, 37.2634, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000004', 'Kajiado Central School', '0701000004', 'Kajiado', '["Languages","Arts"]'::jsonb, 'Book Fund', -1.8521, 36.7768, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000005', 'Meru Greenhill School', '0701000005', 'Meru', '["Science","Agriculture"]'::jsonb, 'Book List', 0.0463, 37.6559, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000006', 'Kakamega East School', '0701000006', 'Kakamega', '["Mathematics","Science"]'::jsonb, 'Book Fund', 0.2827, 34.7519, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000007', 'Kisii Hills School', '0701000007', 'Kisii', '["Languages","Business"]'::jsonb, 'Book List', -0.6773, 34.7796, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000008', 'Nyeri Highlands Academy', '0701000008', 'Nyeri', '["Science","ICT"]'::jsonb, 'Book Fund', -0.4201, 36.9476, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000009', 'Kericho Springs School', '0701000009', 'Kericho', '["Agriculture","Mathematics"]'::jsonb, 'Book List', -0.3687, 35.2831, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000010', 'Bungoma Ridge School', '0701000010', 'Bungoma', '["Science","Sports"]'::jsonb, 'Book Fund', 0.5635, 34.5606, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000011', 'Garissa Model School', '0701000011', 'Garissa', '["Languages","Mathematics"]'::jsonb, 'Book List', -0.4532, 39.6401, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true),
+  ('a1000000-0000-0000-0000-000000000012', 'Malindi Coast Academy', '0701000012', 'Kilifi', '["Arts","Languages"]'::jsonb, 'Book Fund', -3.2175, 40.1169, 'GPS updated successfully', '11111111-1111-1111-1111-111111111111', now() - interval '2 day', true)
+ON CONFLICT (id) DO UPDATE
+SET name = excluded.name,
+    phone = excluded.phone,
+    county = excluded.county,
+    "focusAreas" = excluded."focusAreas",
+    book_category = excluded.book_category,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    capture_status = excluded.capture_status,
+    captured_by = excluded.captured_by,
+    captured_at = excluded.captured_at,
+    "isSynced" = excluded."isSynced";
+
 -- 2. Insert Dummy Tasks
 -- Note: We assign these to roles (e.g., target_role = 2, 3, or 4) so they show up for everyone in those roles
 INSERT INTO public.tasks (title, description, target_role, status, due_at, "isSynced")
